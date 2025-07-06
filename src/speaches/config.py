@@ -74,10 +74,13 @@ class Config(BaseSettings):
 
     whisper: WhisperConfig = WhisperConfig()
 
-    _unstable_vad_filter: bool = False
+    _unstable_vad_filter: bool = True
     """
     Default value for VAD (Voice Activity Detection) filter in speech recognition endpoints.
     When enabled, the model will filter out non-speech segments. Useful for removing hallucinations in speech recognition caused by background silences.
+
+
+    NOTE: having `_unstable_vad_filter: True` technically deviates from the OpenAI API specification, so you may want to set it to `False`.
 
     NOTE: This is an unstable feature and may change in the future.
     """
