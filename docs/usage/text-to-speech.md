@@ -23,7 +23,7 @@ uvx speaches-cli model ls --task text-to-speech | jq '.data | map(select(.id == 
 
 ```bash
 export SPEACHES_BASE_URL="http://localhost:8000"
-export MODEL_ID="speaches-ai/Kokoro-82M-v1.0-ONNX"
+export SPEECH_MODEL_ID="speaches-ai/Kokoro-82M-v1.0-ONNX"
 
 # List available voices
 # TODO
@@ -36,7 +36,7 @@ curl "$SPEACHES_BASE_URL/v1/audio/speech" -s -H "Content-Type: application/json"
   --data @- << EOF
 {
   "input": "Hello World!",
-  "model": "$MODEL_ID",
+  "model": "$SPEECH_MODEL_ID",
   "voice": "$VOICE_ID"
 }
 EOF
@@ -46,7 +46,7 @@ curl "$SPEACHES_BASE_URL/v1/audio/speech" -s -H "Content-Type: application/json"
   --data @- << EOF
 {
   "input": "Hello World!",
-  "model": "$MODEL_ID",
+  "model": "$SPEECH_MODEL_ID",
   "voice": "$VOICE_ID",
   "response_format": "wav"
 }
@@ -57,7 +57,7 @@ curl "$SPEACHES_BASE_URL/v1/audio/speech" -s -H "Content-Type: application/json"
   --data @- << EOF
 {
   "input": "Hello World!",
-  "model": "$MODEL_ID",
+  "model": "$SPEECH_MODEL_ID",
   "voice": "$VOICE_ID",
   "speed": 2.0
 }
