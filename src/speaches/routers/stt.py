@@ -24,7 +24,11 @@ from speaches.api_types import (
 )
 from speaches.dependencies import AudioFileDependency, ConfigDependency, WhisperModelManagerDependency
 from speaches.executors.whisper import utils as whisper_utils
-from speaches.hf_utils import get_model_card_data_from_cached_repo_info, get_model_repo_path
+from speaches.hf_utils import (
+    MODEL_CARD_DOESNT_EXISTS_ERROR_MESSAGE,
+    get_model_card_data_from_cached_repo_info,
+    get_model_repo_path,
+)
 from speaches.model_aliases import ModelId
 from speaches.text_utils import segments_to_srt, segments_to_text, segments_to_vtt
 
@@ -184,7 +188,11 @@ def transcribe_file(
         )
     cached_repo_info = _scan_cached_repo(model_repo_path)
     model_card_data = get_model_card_data_from_cached_repo_info(cached_repo_info)
-    assert model_card_data is not None, cached_repo_info  # FIXME
+    if model_card_data is None:
+        raise HTTPException(
+            status_code=500,
+            detail=MODEL_CARD_DOESNT_EXISTS_ERROR_MESSAGE.format(model_id=model),
+        )
     if whisper_utils.hf_model_filter.passes_filter(model_card_data):
         with model_manager.load_model(model) as whisper:
             whisper_model = BatchedInferencePipeline(model=whisper) if config.whisper.use_batched_mode else whisper

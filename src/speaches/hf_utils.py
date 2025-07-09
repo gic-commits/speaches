@@ -11,6 +11,8 @@ from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
+MODEL_CARD_DOESNT_EXISTS_ERROR_MESSAGE = """The model repository does not contain a valid model card. This is likely due to the breaking change introduce v0.8.0 release. You should try to delete the model and re-download it using `DELETE /v1/models/{model_id}` and then `POST /v1/models`. Or if the issue persists, you can try to delete the entire HuggingFace cache directory (delete the whole volume if you are using Docker). Apologies for the inconvenience."""
+
 
 class HfModelFilterDict(TypedDict):
     library: str | None

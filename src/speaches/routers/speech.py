@@ -10,7 +10,11 @@ from speaches.audio import convert_audio_format
 from speaches.dependencies import KokoroModelManagerDependency, PiperModelManagerDependency
 from speaches.executors.kokoro import utils as kokoro_utils
 from speaches.executors.piper import utils as piper_utils
-from speaches.hf_utils import get_model_card_data_from_cached_repo_info, get_model_repo_path
+from speaches.hf_utils import (
+    MODEL_CARD_DOESNT_EXISTS_ERROR_MESSAGE,
+    get_model_card_data_from_cached_repo_info,
+    get_model_repo_path,
+)
 from speaches.model_aliases import ModelId
 from speaches.text_utils import strip_emojis, strip_markdown_emphasis
 
@@ -63,7 +67,11 @@ async def synthesize(
         )
     cached_repo_info = _scan_cached_repo(model_repo_path)
     model_card_data = get_model_card_data_from_cached_repo_info(cached_repo_info)
-    assert model_card_data is not None, cached_repo_info  # FIXME
+    if model_card_data is None:
+        raise HTTPException(
+            status_code=500,
+            detail=MODEL_CARD_DOESNT_EXISTS_ERROR_MESSAGE.format(model_id=body.model),
+        )
 
     body.input = strip_emojis(body.input)
     body.input = strip_markdown_emphasis(body.input)
