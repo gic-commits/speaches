@@ -287,7 +287,7 @@ async def handle_completions(  # noqa: C901
             "openai_error_type": getattr(getattr(e, "error", None), "type", None),
             "openai_error_code": getattr(getattr(e, "error", None), "code", None),
             "openai_error_message": getattr(getattr(e, "error", None), "message", None),
-            "openai_request_id": getattr(getattr(e, "response", None), "headers", {{}}).get("x-request-id", None),
+            "openai_request_id": getattr(getattr(e, "response", None), "headers", {}).get("x-request-id", None),
             "endpoint": getattr(chat_completion_client, "endpoint", None),
             "timestamp": datetime.now(UTC).isoformat().replace("+00:00", "Z"),
             "exception_type": type(e).__name__,
