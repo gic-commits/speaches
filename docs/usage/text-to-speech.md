@@ -126,4 +126,3 @@ EOF
 ## Limitations
 
 - `response_format`: `opus` and `aac` are not supported
-- Maximum audio generation length is 10 seconds for Piper models
