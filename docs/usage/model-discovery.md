@@ -60,6 +60,83 @@ The downloaded model will now be included in the list of available models when y
     curl "$SPEACHES_BASE_URL/v1/models"
     ```
 
+## Model Aliasing
+
+`speaches` supports model aliasing, which allows you to use friendly names for models instead of their full repository paths. This is particularly useful for maintaining compatibility with OpenAI's API naming conventions.
+
+Model aliases are defined in the `model_aliases.json` file in the root directory of your `speaches` installation. The file contains a JSON object mapping alias names to actual model IDs:
+
+```json
+{
+  "tts-1": "speaches-ai/Kokoro-82M-v1.0-ONNX",
+  "tts-1-hd": "speaches-ai/Kokoro-82M-v1.0-ONNX",
+  "whisper-1": "Systran/faster-whisper-large-v3"
+}
+```
+
+### Using Model Aliases
+
+Once configured, you can use the alias name anywhere you would normally use a full model ID:
+
+=== "Speaches CLI"
+
+    ```bash
+    # Use alias instead of full model path
+    uvx speaches-cli model download whisper-1
+
+    # This is equivalent to:
+    uvx speaches-cli model download Systran/faster-whisper-large-v3
+    ```
+
+=== "cURL"
+
+    ```bash
+    # Use alias in API requests
+    curl "$SPEACHES_BASE_URL/v1/models/whisper-1" -X POST
+
+    # This is equivalent to:
+    curl "$SPEACHES_BASE_URL/v1/models/Systran/faster-whisper-large-v3" -X POST
+    ```
+
+### Configuring Model Aliases
+
+To add or modify model aliases:
+
+1. **Edit the `model_aliases.json` file** in your `speaches` root directory
+2. **Add or modify entries** using the format `"alias_name": "actual_model_id"`
+3. **Restart the server** for changes to take effect
+
+**Example:**
+
+```json
+{
+  "my-whisper": "openai/whisper-large-v3",
+  "fast-tts": "speaches-ai/Kokoro-82M-v1.0-ONNX"
+}
+```
+
+!!! note
+
+    Model aliases are loaded only once when the server starts. You must restart the server after modifying the `model_aliases.json` file.
+
+#### Docker Deployment
+
+If you're using a Docker deployment, you'll need to bind mount your local `model_aliases.json` file to the container:
+
+```bash
+# Mount your local model_aliases.json file
+docker run -v /path/to/your/model_aliases.json:/home/ubuntu/speaches/model_aliases.json speaches
+```
+
+Or in your `compose.yaml`:
+
+```yaml
+services:
+  speaches:
+    volumes:
+      - ./model_aliases.json:/home/ubuntu/speaches/model_aliases.json
+```
+
 ## FAQ
 
 ???+ question "Where do the models go?"
