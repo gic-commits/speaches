@@ -65,7 +65,13 @@ def create_app() -> FastAPI:
     if config.api_key is not None:
         dependencies.append(ApiKeyDependency)
 
-    app = FastAPI(dependencies=dependencies, openapi_tags=TAGS_METADATA)
+    app = FastAPI(
+        dependencies=dependencies,
+        title="Speaches",
+        version="v0.8.2",  # TODO: update this on release
+        license_info={"name": "MIT License", "identifier": "MIT"},
+        openapi_tags=TAGS_METADATA,
+    )
 
     # Register global exception handler for APIProxyError
     @app.exception_handler(APIProxyError)

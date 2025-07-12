@@ -52,7 +52,7 @@ AUDIO_TRANSCRIPTION_CACHE_SIZE = 4096
 AUDIO_TRANSCRIPTION_TTL_SECONDS = 60 * 60
 
 logger = logging.getLogger(__name__)
-router = APIRouter()
+router = APIRouter(tags=["voice-chat"])
 cache: TTLCache[str, str] = TTLCache(maxsize=AUDIO_TRANSCRIPTION_CACHE_SIZE, ttl=AUDIO_TRANSCRIPTION_TTL_SECONDS)
 
 
