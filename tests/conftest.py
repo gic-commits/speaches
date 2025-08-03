@@ -83,14 +83,15 @@ async def aclient(aclient_factory: AclientFactory) -> AsyncGenerator[AsyncClient
 
 @pytest.fixture
 def openai_client(aclient: AsyncClient) -> AsyncOpenAI:
-    return AsyncOpenAI(api_key="cant-be-empty", http_client=aclient)
+    return AsyncOpenAI(api_key="cant-be-empty", http_client=aclient, max_retries=0)
 
 
 @pytest.fixture
 def actual_openai_client() -> AsyncOpenAI:
     return AsyncOpenAI(
         # `base_url` is provided in case `OPENAI_BASE_URL` is set to a different value
-        base_url=OPENAI_BASE_URL
+        base_url=OPENAI_BASE_URL,
+        max_retries=0,
     )
 
 

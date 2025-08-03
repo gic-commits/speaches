@@ -61,7 +61,9 @@ async def send_mic_audio(connection: AsyncRealtimeConnection) -> None:
 
 
 async def main() -> None:
-    realtime_client = AsyncOpenAI(api_key="does-not-matter", websocket_base_url=WEBSOCKET_BASE_URL).beta.realtime
+    realtime_client = AsyncOpenAI(
+        api_key="does-not-matter", websocket_base_url=WEBSOCKET_BASE_URL, max_retries=0
+    ).beta.realtime
     async with asyncio.TaskGroup() as tg, realtime_client.connect(model=MODEL) as conn:
         tg.create_task(print_events(conn, final_event=None))
         await conn.session.update(

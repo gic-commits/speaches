@@ -60,6 +60,7 @@ async def main(config: Config) -> None:
         api_key=config.api_key.get_secret_value(),
         base_url=f"{config.speaches_base_url.get_secret_value()}/v1",
         http_client=client,
+        max_retries=0,
     )
 
     logger.debug(f"Attempting to pull model {config.speech_model_id}")

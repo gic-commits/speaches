@@ -31,5 +31,7 @@ def http_client_from_gradio_req(request: gr.Request, config: Config) -> httpx.As
 def openai_client_from_gradio_req(request: gr.Request, config: Config) -> AsyncOpenAI:
     base_url = base_url_from_gradio_req(request, config)
     return AsyncOpenAI(
-        base_url=f"{base_url}/v1", api_key=config.api_key.get_secret_value() if config.api_key else "cant-be-empty"
+        base_url=f"{base_url}/v1",
+        api_key=config.api_key.get_secret_value() if config.api_key else "cant-be-empty",
+        max_retries=0,
     )
