@@ -293,6 +293,7 @@ async def realtime_webrtc(
         "icegatheringstatechange",
         lambda: logger.info(f"ICE gathering state changed to {pc.iceGatheringState}"),
     )
+    # NOTE: will never be called according to https://github.com/aiortc/aiortc/issues/1344
     pc.on(
         "icecandidate",
         lambda *args, **kwargs: logger.info(f"ICE candidate: {args}, {kwargs}. {pc.iceGatheringState}"),
@@ -318,6 +319,7 @@ async def realtime_webrtc(
         for codec in media.rtp.codecs:
             if codec.name != "opus":
                 logger.info(f"Removing codec: {codec}")
+                continue
             filtered_codecs.append(codec)
         if len(filtered_codecs) == 0:
             logger.error("No appropriate codecs found")
