@@ -8,6 +8,7 @@ import threading
 from typing import BinaryIO, Literal, Self, cast
 
 import numpy as np
+import numpy.typing
 import soundfile as sf
 
 logger = logging.getLogger(__name__)
