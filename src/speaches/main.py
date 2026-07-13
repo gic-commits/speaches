@@ -26,6 +26,9 @@ from speaches.logger import setup_logger
 from speaches.routers.chat import (
     router as chat_router,
 )
+from speaches.routers.deepgram import (
+    router as deepgram_router,
+)
 from speaches.routers.diarization import (
     router as diarization_router,
 )
@@ -65,6 +68,7 @@ if TYPE_CHECKING:
 # https://fastapi.tiangolo.com/tutorial/metadata/#metadata-for-tags
 TAGS_METADATA = [
     {"name": "automatic-speech-recognition"},
+    {"name": "deepgram"},
     {"name": "speech-to-text"},
     {"name": "speaker-embedding"},
     {"name": "realtime"},
@@ -156,6 +160,9 @@ def create_app() -> FastAPI:
 
     # Public routers WITHOUT authentication
     app.include_router(misc_public_router)
+
+    # Deepgram router (handles its own authentication, both HTTP and WS)
+    app.include_router(deepgram_router)
 
     # HTTP routers WITH authentication (if API key is configured)
     http_dependencies = []
