@@ -14,7 +14,6 @@ from fastapi import (
     HTTPException,
     Query,
     Request,
-    UploadFile,
     WebSocket,
     status,
 )
@@ -136,24 +135,22 @@ async def _decode_audio_from_request(request: Request) -> Audio:
 
     from speaches.audio import Audio
 
-    content_type = request.headers.get("content-type", "")
+    raw_bytes = await request.body()
+    if not raw_bytes:
+        raise HTTPException(status_code=400, detail="Empty request body")
 
-    raw_bytes: bytes | None = None
+    content_type = request.headers.get("content-type", "")
     if content_type.startswith("multipart/form-data"):
         try:
             form = await request.form()
-            file_fields = [(name, field) for name, field in form.items() if isinstance(field, UploadFile)]
-            if file_fields:
-                upload_file: UploadFile = file_fields[0][1]
-                raw_bytes = await upload_file.read()
+            for _, field in form.items():
+                if hasattr(field, "read"):
+                    file_bytes = await field.read()
+                    if file_bytes:
+                        raw_bytes = file_bytes
+                    break
         except Exception:
             pass
-
-    if raw_bytes is None:
-        raw_bytes = await request.body()
-
-    if not raw_bytes:
-        raise HTTPException(status_code=400, detail="Empty request body")
 
     try:
         audio_data, audio_sr = sf.read(io.BytesIO(raw_bytes), dtype="float32")
