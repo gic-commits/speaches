@@ -82,6 +82,8 @@ class TestDeepgramResponseBuilder:
         assert alt["words"] == []
 
     def test_transcription_with_words(self):
+        import math
+
         import openai.types.audio
 
         from speaches.routers.deepgram import _build_deepgram_response
@@ -105,6 +107,9 @@ class TestDeepgramResponseBuilder:
         alt = result["results"]["channels"][0]["alternatives"][0]
         assert alt["transcript"] == "Hello world"
         assert len(alt["words"]) == 2
+        expected_word_conf = round(math.exp(-0.1), 4)
+        assert alt["words"][0]["confidence"] == expected_word_conf
+        assert alt["words"][1]["confidence"] == expected_word_conf
         assert alt["confidence"] > 0
 
     def test_confidence_from_avg_logprob(self):
