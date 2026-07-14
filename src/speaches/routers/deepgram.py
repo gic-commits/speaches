@@ -75,23 +75,28 @@ def _build_deepgram_response(
     request_id: str,
     detected_language: str | None = None,
 ) -> dict:
+    import math
     import openai.types.audio
     import numpy as np
 
     transcript = res.text.strip() if res.text else ""
 
     words: list[dict] = []
-    if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.words:
-        words = [
-            {
+    if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.words and res.segments:
+        for w in res.words:
+            seg_conf = 0.0
+            for s in res.segments:
+                if s.start is not None and s.end is not None and s.start <= w.start <= s.end:
+                    if s.avg_logprob is not None:
+                        seg_conf = round(float(math.exp(s.avg_logprob)), 4)
+                    break
+            words.append({
                 "word": w.word,
                 "start": round(w.start, 3),
                 "end": round(w.end, 3),
-                "confidence": 0.0,
+                "confidence": seg_conf,
                 "punctuated_word": w.word,
-            }
-            for w in res.words
-        ]
+            })
 
     segments = res.segments if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.segments else []
     if segments:
@@ -133,17 +138,19 @@ async def _decode_audio_from_request(request: Request) -> Audio:
 
     content_type = request.headers.get("content-type", "")
 
+    raw_bytes: bytes | None = None
     if content_type.startswith("multipart/form-data"):
-        form = await request.form()
-        file_fields = [(name, field) for name, field in form.items() if isinstance(field, UploadFile)]
-        if not file_fields:
-            raise HTTPException(status_code=400, detail="No audio file found in multipart form data")
-        upload_file: UploadFile = file_fields[0][1]
-        raw_bytes = await upload_file.read()
-        filename = upload_file.filename
-    else:
+        try:
+            form = await request.form()
+            file_fields = [(name, field) for name, field in form.items() if isinstance(field, UploadFile)]
+            if file_fields:
+                upload_file: UploadFile = file_fields[0][1]
+                raw_bytes = await upload_file.read()
+        except Exception:
+            pass
+
+    if raw_bytes is None:
         raw_bytes = await request.body()
-        filename = None
 
     if not raw_bytes:
         raise HTTPException(status_code=400, detail="Empty request body")
@@ -156,7 +163,7 @@ async def _decode_audio_from_request(request: Request) -> Audio:
         if audio_sr != SAMPLE_RATE:
             from speaches.audio import resample_audio_data
             audio_data = resample_audio_data(audio_data, audio_sr, SAMPLE_RATE)
-        return Audio(audio_data, sample_rate=SAMPLE_RATE, name=filename)
+        return Audio(audio_data, sample_rate=SAMPLE_RATE)
     except Exception as e:
         raise HTTPException(status_code=415, detail=f"Failed to decode audio: {e}") from e
 
@@ -259,6 +266,7 @@ def _transcribe_audio_ws(
     language: str | None,
     executor_registry,
 ):
+    import math
     import numpy as np
     import openai.types.audio
 
@@ -266,16 +274,21 @@ def _transcribe_audio_ws(
     audio = Audio(audio_data, sample_rate=SAMPLE_RATE)
     res = _transcribe(audio, model, language, executor_registry)
     transcript = res.text.strip() if res.text else ""
-    words = [
-        {"word": w.word, "start": round(w.start, 3), "end": round(w.end, 3), "confidence": 0.0, "punctuated_word": w.word}
-        for w in (res.words if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.words else [])
-    ]
-    segments = res.segments if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.segments else []
-    if segments:
-        avg_logprobs = [s.avg_logprob for s in segments if s.avg_logprob is not None]
-        confidence = round(float(np.exp(np.mean(avg_logprobs))), 4) if avg_logprobs else 0.0
-    else:
-        confidence = 0.0
+
+    res_words = res.words if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.words else []
+    res_segments = res.segments if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.segments else []
+    words = []
+    for w in res_words:
+        seg_conf = 0.0
+        for s in res_segments:
+            if s.start is not None and s.end is not None and s.start <= w.start <= s.end:
+                if s.avg_logprob is not None:
+                    seg_conf = round(float(math.exp(s.avg_logprob)), 4)
+                break
+        words.append({
+            "word": w.word, "start": round(w.start, 3), "end": round(w.end, 3),
+            "confidence": seg_conf, "punctuated_word": w.word,
+        })
     duration = res.duration if hasattr(res, "duration") and res.duration is not None else len(audio_data) / SAMPLE_RATE
     return transcript, confidence, words, duration
 
