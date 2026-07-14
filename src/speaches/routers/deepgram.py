@@ -19,7 +19,7 @@ from fastapi import (
 )
 
 from speaches.config import Config
-from speaches.model_aliases import ModelId
+from speaches.model_aliases import ModelId, resolve_model_id_alias
 
 logger = logging.getLogger(__name__)
 
@@ -221,6 +221,7 @@ async def deepgram_listen_http(
     encoding: str | None = Query(None),
     sample_rate: int | None = Query(None),
 ) -> dict:
+    model = resolve_model_id_alias(model)
     config = get_config()
     verify_deepgram_api_key(config, request.headers.get("authorization"))
 
@@ -305,6 +306,7 @@ async def deepgram_listen_ws(
     utterance_end_ms: str = Query("1000"),
     vad_turnoff: bool = Query(False),
 ) -> None:
+    model = resolve_model_id_alias(model)
     await websocket.accept()
 
     request_id = str(uuid4())
