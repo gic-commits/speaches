@@ -5,11 +5,12 @@ import io
 import json
 import logging
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
+from typing import Annotated
 from uuid import uuid4
 
 from fastapi import (
     APIRouter,
+    Depends,
     HTTPException,
     Query,
     Request,
@@ -18,11 +19,7 @@ from fastapi import (
     status,
 )
 
-if TYPE_CHECKING:
-    from speaches.dependencies import (
-        ConfigDependency,
-        ExecutorRegistryDependency,
-    )
+from speaches.config import Config
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +27,25 @@ router = APIRouter(tags=["deepgram"])
 
 SAMPLE_RATE = 16000
 DEEPGRAM_WS_CLOSE_TIMEOUT = 5.0
+
+
+def get_config() -> Config:
+    return Config()
+
+
+async def get_config_async() -> Config:
+    return get_config()
+
+
+ConfigDependency = Annotated[Config, Depends(get_config_async)]
+
+
+async def get_executor_registry_async():
+    from speaches.dependencies import get_executor_registry
+    return get_executor_registry()
+
+
+ExecutorRegistryDependency = Annotated[object, Depends(get_executor_registry_async)]
 
 
 def verify_deepgram_api_key(config, authorization: str | None) -> None:
@@ -200,7 +216,6 @@ async def deepgram_listen_http(
     encoding: str | None = Query(None),
     sample_rate: int | None = Query(None),
 ) -> dict:
-    from speaches.dependencies import get_config
     config = get_config()
     verify_deepgram_api_key(config, request.headers.get("authorization"))
 
