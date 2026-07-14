@@ -34,15 +34,16 @@ RUN --mount=type=cache,target=/home/ubuntu/.cache/uv,uid=1000,gid=1000 \
 COPY --chown=ubuntu . .
 RUN --mount=type=cache,target=/home/ubuntu/.cache/uv,uid=1000,gid=1000 \
     uv sync --frozen --compile-bytecode --no-dev
+# NOTE: the following commands (lines 37-51) run as root to ensure proper directory creation before switching back to the ubuntu user
+USER root
 # Creating a directory for the cache to avoid the following error:
 # PermissionError: [Errno 13] Permission denied: '/home/ubuntu/.cache/huggingface/hub'
 # This error occurs because the volume is mounted as root and the `ubuntu` user doesn't have permission to write to it. Pre-creating the directory solves this issue.
-RUN mkdir -p $HOME/.cache/huggingface/hub
+RUN mkdir -p /home/ubuntu/.cache/huggingface/hub && chown -R ubuntu:ubuntu /home/ubuntu/.cache
 # Register pip-installed CUDA library directories with ldconfig so that
 # C++ libraries (e.g. ctranslate2) can find them via the system dynamic linker.
 # This is needed because those libraries live inside the venv and are not on
 # any default search path.
-USER root
 RUN find /home/ubuntu/speaches/.venv -maxdepth 7 -path "*/nvidia/*/lib" -type d \
     > /etc/ld.so.conf.d/venv-nvidia.conf && ldconfig
 USER ubuntu
