@@ -1,0 +1,6 @@
+services:
+  speaches:
+    container_name: speaches2
+    image: speaches2-cpu:latest
+    ports:
+      - 8001:8000
