@@ -19,6 +19,7 @@ from fastapi import (
 )
 
 from speaches.config import Config
+from speaches.model_aliases import ModelId
 
 logger = logging.getLogger(__name__)
 
@@ -213,7 +214,7 @@ def _transcribe(
 async def deepgram_listen_http(
     request: Request,
     executor_registry: ExecutorRegistryDependency,
-    model: str = Query("whisper-1"),
+    model: ModelId = Query("whisper-1"),
     language: str | None = Query(None),
     punctuate: bool = Query(False),
     diarize: bool = Query(False),
@@ -295,7 +296,7 @@ async def deepgram_listen_ws(
     websocket: WebSocket,
     executor_registry: ExecutorRegistryDependency,
     config: ConfigDependency,
-    model: str = Query("whisper-1"),
+    model: ModelId = Query("whisper-1"),
     language: str | None = Query(None),
     encoding: str = Query("linear16"),
     sample_rate: int = Query(16000),
