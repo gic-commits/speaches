@@ -69,50 +69,83 @@ def verify_deepgram_api_key(config, authorization: str | None) -> None:
         )
 
 
+def _build_word_confidence(res, words):
+    import math
+    import openai.types.audio
+    segments = res.segments if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.segments else []
+    word_conf = []
+    for w in words:
+        seg_conf = 0.0
+        for s in segments:
+            if s.start is not None and s.end is not None and s.start <= w.start <= s.end:
+                if s.avg_logprob is not None:
+                    seg_conf = round(float(math.exp(s.avg_logprob)), 4)
+                break
+        word_conf.append(seg_conf)
+    return word_conf
+
+
+def _build_overall_confidence(res):
+    import math
+    import numpy as np
+    import openai.types.audio
+    segments = res.segments if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.segments else []
+    if not segments:
+        return 0.0
+    avg_logprobs = [s.avg_logprob for s in segments if s.avg_logprob is not None]
+    return round(float(np.exp(np.mean(avg_logprobs))), 4) if avg_logprobs else 0.0
+
+
+def _build_deepgram_metadata(
+    request_id: str, duration: float, audio_sha256: str | None = None
+) -> dict:
+    model_uuid = "00000000-0000-0000-0000-000000000001"
+    return {
+        "transaction_key": "deprecated",
+        "request_id": request_id,
+        "sha256": audio_sha256 or "",
+        "created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+        "duration": round(duration, 3),
+        "channels": 1,
+        "models": [model_uuid],
+        "model_info": {
+            model_uuid: {
+                "name": "faster-whisper",
+                "version": "latest",
+                "arch": "whisper",
+            }
+        },
+    }
+
+
 def _build_deepgram_response(
     res,
     duration: float,
     request_id: str,
+    audio_sha256: str | None = None,
     detected_language: str | None = None,
 ) -> dict:
-    import math
     import openai.types.audio
-    import numpy as np
 
     transcript = res.text.strip() if res.text else ""
 
-    words: list[dict] = []
-    if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.words and res.segments:
-        for w in res.words:
-            seg_conf = 0.0
-            for s in res.segments:
-                if s.start is not None and s.end is not None and s.start <= w.start <= s.end:
-                    if s.avg_logprob is not None:
-                        seg_conf = round(float(math.exp(s.avg_logprob)), 4)
-                    break
-            words.append({
-                "word": w.word,
-                "start": round(w.start, 3),
-                "end": round(w.end, 3),
-                "confidence": seg_conf,
-                "punctuated_word": w.word,
-            })
+    res_words = res.words if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.words else []
+    word_conf = _build_word_confidence(res, res_words)
+    words = [
+        {
+            "word": w.word,
+            "start": round(w.start, 3),
+            "end": round(w.end, 3),
+            "confidence": word_conf[i],
+            "punctuated_word": w.word,
+        }
+        for i, w in enumerate(res_words)
+    ]
 
-    segments = res.segments if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.segments else []
-    if segments:
-        avg_logprobs = [s.avg_logprob for s in segments if s.avg_logprob is not None]
-        confidence = round(float(np.exp(np.mean(avg_logprobs))), 4) if avg_logprobs else 0.0
-    else:
-        confidence = 0.0
+    confidence = _build_overall_confidence(res)
 
     return {
-        "metadata": {
-            "request_id": request_id,
-            "created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
-            "duration": round(duration, 3),
-            "channels": 1,
-            "model_info": {"name": "faster-whisper"},
-        },
+        "metadata": _build_deepgram_metadata(request_id, duration, audio_sha256),
         "results": {
             "channels": [
                 {
@@ -211,16 +244,17 @@ def _transcribe(
 
 
 @router.get("/v1/projects")
-async def deepgram_projects(request: Request) -> list[dict]:
+async def deepgram_projects(request: Request) -> dict:
     config = get_config()
     verify_deepgram_api_key(config, request.headers.get("authorization"))
-    return [
-        {
-            "project_id": "speaches",
-            "name": "speaches",
-            "company": None,
-        }
-    ]
+    return {
+        "projects": [
+            {
+                "project_id": "speaches",
+                "name": "speaches",
+            }
+        ]
+    }
 
 
 @router.post("/v1/listen")
@@ -234,17 +268,20 @@ async def deepgram_listen_http(
     encoding: str | None = Query(None),
     sample_rate: int | None = Query(None),
 ) -> dict:
+    import hashlib
+
     model = resolve_model_id_alias(model)
     config = get_config()
     verify_deepgram_api_key(config, request.headers.get("authorization"))
 
     audio = await _decode_audio_from_request(request)
+    audio_sha256 = hashlib.sha256(audio.data.tobytes()).hexdigest()
     res = _transcribe(audio, model, language, executor_registry)
 
     detected_language = res.language if hasattr(res, "language") else None
     duration = res.duration if hasattr(res, "duration") and res.duration is not None else audio.duration
     request_id = str(uuid4())
-    return _build_deepgram_response(res, duration, request_id, detected_language)
+    return _build_deepgram_response(res, duration, request_id, audio_sha256, detected_language)
 
 
 def _decode_ws_audio_frame(
@@ -327,8 +364,12 @@ async def deepgram_listen_ws(
 
     await websocket.send_text(json.dumps({
         "type": "Metadata",
+        "transaction_key": "deprecated",
         "request_id": request_id,
+        "sha256": "",
         "created": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z",
+        "duration": 0.0,
+        "channels": 1,
     }))
 
     try:
@@ -372,6 +413,7 @@ async def deepgram_listen_ws(
                 transcript, confidence, words, duration = _transcribe_audio_ws(
                     accumulated, model, language, executor_registry
                 )
+                model_uuid = "00000000-0000-0000-0000-000000000001"
                 result_msg = {
                     "type": "Results",
                     "channel_index": [0, 1],
@@ -381,6 +423,15 @@ async def deepgram_listen_ws(
                     "speech_final": True,
                     "channel": {
                         "alternatives": [{"transcript": transcript, "confidence": confidence, "words": words}],
+                    },
+                    "metadata": {
+                        "request_id": request_id,
+                        "model_uuid": model_uuid,
+                        "model_info": {
+                            "name": "faster-whisper",
+                            "version": "latest",
+                            "arch": "whisper",
+                        },
                     },
                 }
                 await websocket.send_text(json.dumps(result_msg))
