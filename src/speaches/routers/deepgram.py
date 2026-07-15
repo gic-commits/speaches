@@ -96,6 +96,20 @@ def _build_overall_confidence(res):
     return round(float(np.exp(np.mean(avg_logprobs))), 4) if avg_logprobs else 0.0
 
 
+def _build_words(res, res_words):
+    word_conf = _build_word_confidence(res, res_words)
+    return [
+        {
+            "word": w.word,
+            "start": round(w.start, 3),
+            "end": round(w.end, 3),
+            "confidence": word_conf[i],
+            "punctuated_word": w.word,
+        }
+        for i, w in enumerate(res_words)
+    ]
+
+
 def _build_deepgram_metadata(
     request_id: str, duration: float, audio_sha256: str | None = None
 ) -> dict:
@@ -130,18 +144,7 @@ def _build_deepgram_response(
     transcript = res.text.strip() if res.text else ""
 
     res_words = res.words if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.words else []
-    word_conf = _build_word_confidence(res, res_words)
-    words = [
-        {
-            "word": w.word,
-            "start": round(w.start, 3),
-            "end": round(w.end, 3),
-            "confidence": word_conf[i],
-            "punctuated_word": w.word,
-        }
-        for i, w in enumerate(res_words)
-    ]
-
+    words = _build_words(res, res_words)
     confidence = _build_overall_confidence(res)
 
     return {
@@ -163,18 +166,46 @@ def _build_deepgram_response(
     }
 
 
-async def _decode_audio_from_request(request: Request) -> Audio:
+async def _decode_audio_bytes(raw_bytes: bytes) -> Audio:
     import numpy as np
     import soundfile as sf
 
     from speaches.audio import Audio
 
+    audio_data, audio_sr = sf.read(io.BytesIO(raw_bytes), dtype="float32")
+    if audio_data.ndim > 1:
+        audio_data = audio_data.mean(axis=1)
+    audio_data = audio_data.astype(np.float32)
+    if audio_sr != SAMPLE_RATE:
+        from speaches.audio import resample_audio_data
+        audio_data = resample_audio_data(audio_data, audio_sr, SAMPLE_RATE)
+    return Audio(audio_data, sample_rate=SAMPLE_RATE)
+
+
+async def _decode_audio_from_request(request: Request) -> Audio:
     raw_bytes = await request.body()
     if not raw_bytes:
         raise HTTPException(status_code=400, detail="Empty request body")
 
     content_type = request.headers.get("content-type", "")
-    if content_type.startswith("multipart/form-data"):
+
+    if content_type.startswith("application/json"):
+        try:
+            body = json.loads(raw_bytes)
+        except json.JSONDecodeError:
+            raise HTTPException(status_code=400, detail="Invalid JSON body")
+        url = body.get("url")
+        if not url:
+            raise HTTPException(status_code=400, detail="Missing 'url' field in JSON body")
+        import httpx
+        try:
+            resp = await httpx.AsyncClient(timeout=300).get(url)
+            resp.raise_for_status()
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch audio from URL: {e}") from e
+        raw_bytes = resp.content
+
+    elif content_type.startswith("multipart/form-data"):
         try:
             form = await request.form()
             for _, field in form.items():
@@ -187,14 +218,7 @@ async def _decode_audio_from_request(request: Request) -> Audio:
             pass
 
     try:
-        audio_data, audio_sr = sf.read(io.BytesIO(raw_bytes), dtype="float32")
-        if audio_data.ndim > 1:
-            audio_data = audio_data.mean(axis=1)
-        audio_data = audio_data.astype(np.float32)
-        if audio_sr != SAMPLE_RATE:
-            from speaches.audio import resample_audio_data
-            audio_data = resample_audio_data(audio_data, audio_sr, SAMPLE_RATE)
-        return Audio(audio_data, sample_rate=SAMPLE_RATE)
+        return await _decode_audio_bytes(raw_bytes)
     except Exception as e:
         raise HTTPException(status_code=415, detail=f"Failed to decode audio: {e}") from e
 
@@ -263,10 +287,19 @@ async def deepgram_listen_http(
     executor_registry: ExecutorRegistryDependency,
     model: ModelId = Query("whisper-1"),
     language: str | None = Query(None),
-    punctuate: bool = Query(False),
-    diarize: bool = Query(False),
     encoding: str | None = Query(None),
     sample_rate: int | None = Query(None),
+    punctuate: bool = Query(False),
+    smart_format: bool = Query(False),
+    diarize: bool = Query(False),
+    utterances: bool = Query(False),
+    paragraphs: bool = Query(False),
+    numerals: bool = Query(False),
+    profanity_filter: bool = Query(False),
+    multichannel: bool = Query(False),
+    dictation: bool = Query(False),
+    filler_words: bool = Query(False),
+    detect_language: bool = Query(False),
 ) -> dict:
     import hashlib
 
@@ -315,7 +348,6 @@ def _transcribe_audio_ws(
     language: str | None,
     executor_registry,
 ):
-    import math
     import numpy as np
     import openai.types.audio
 
@@ -325,19 +357,8 @@ def _transcribe_audio_ws(
     transcript = res.text.strip() if res.text else ""
 
     res_words = res.words if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.words else []
-    res_segments = res.segments if isinstance(res, openai.types.audio.TranscriptionVerbose) and res.segments else []
-    words = []
-    for w in res_words:
-        seg_conf = 0.0
-        for s in res_segments:
-            if s.start is not None and s.end is not None and s.start <= w.start <= s.end:
-                if s.avg_logprob is not None:
-                    seg_conf = round(float(math.exp(s.avg_logprob)), 4)
-                break
-        words.append({
-            "word": w.word, "start": round(w.start, 3), "end": round(w.end, 3),
-            "confidence": seg_conf, "punctuated_word": w.word,
-        })
+    words = _build_words(res, res_words)
+    confidence = _build_overall_confidence(res)
     duration = res.duration if hasattr(res, "duration") and res.duration is not None else len(audio_data) / SAMPLE_RATE
     return transcript, confidence, words, duration
 
@@ -355,6 +376,15 @@ async def deepgram_listen_ws(
     interim_results: bool = Query(False),
     utterance_end_ms: str = Query("1000"),
     vad_turnoff: bool = Query(False),
+    smart_format: bool = Query(False),
+    diarize: bool = Query(False),
+    multichannel: bool = Query(False),
+    numerals: bool = Query(False),
+    profanity_filter: bool = Query(False),
+    detect_entities: bool = Query(False),
+    endpointing: str = Query("10"),
+    channels: str = Query("1"),
+    vad_events: bool = Query(False),
 ) -> None:
     model = resolve_model_id_alias(model)
     await websocket.accept()
