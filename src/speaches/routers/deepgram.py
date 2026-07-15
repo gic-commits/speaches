@@ -210,6 +210,19 @@ def _transcribe(
     return res  # pyrefly: ignore[bad-return]
 
 
+@router.get("/v1/projects")
+async def deepgram_projects(request: Request) -> list[dict]:
+    config = get_config()
+    verify_deepgram_api_key(config, request.headers.get("authorization"))
+    return [
+        {
+            "project_id": "speaches",
+            "name": "speaches",
+            "company": None,
+        }
+    ]
+
+
 @router.post("/v1/listen")
 async def deepgram_listen_http(
     request: Request,
