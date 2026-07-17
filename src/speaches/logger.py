@@ -1,13 +1,30 @@
 import logging
 import logging.config
+from collections import deque
+
+
+class RingBufferHandler(logging.Handler):
+    def __init__(self, capacity: int = 2000) -> None:
+        super().__init__()
+        self.buffer = deque(maxlen=capacity)
+
+    def emit(self, record: logging.LogRecord) -> None:
+        self.buffer.append(self.format(record))
+
+    def get_logs(self, lines: int = 200) -> list[str]:
+        return list(self.buffer)[-lines:]
+
+
+ring_buffer_handler = RingBufferHandler()
 
 
 def setup_logger(log_level: str) -> None:
     assert log_level.upper() in ["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"], log_level
-    # https://www.youtube.com/watch?v=9L77QExPmI0
-    # https://docs.python.org/3/library/logging.config.html
+    ring_buffer_handler.setFormatter(logging.Formatter(
+        "%(asctime)s:%(levelname)s:%(name)s:%(funcName)s:%(lineno)d:%(message)s"
+    ))
     logging_config = {
-        "version": 1,  # required
+        "version": 1,
         "disable_existing_loggers": False,
         "formatters": {
             "simple": {"format": "%(asctime)s:%(levelname)s:%(name)s:%(funcName)s:%(lineno)d:%(message)s"},
@@ -24,7 +41,6 @@ def setup_logger(log_level: str) -> None:
                 "level": log_level.upper(),
                 "handlers": ["stdout"],
             },
-            # TODO: do I need to specify `handlers` for each logger?
             "PIL": {
                 "level": "INFO",
                 "handlers": ["stdout"],
@@ -61,3 +77,4 @@ def setup_logger(log_level: str) -> None:
     }
 
     logging.config.dictConfig(logging_config)
+    logging.getLogger().addHandler(ring_buffer_handler)
