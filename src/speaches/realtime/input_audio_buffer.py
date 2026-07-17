@@ -150,6 +150,7 @@ class InputAudioBufferTranscriber:
             endian="LITTLE",
             format="wav",
         )
+        file.seek(0)
         start = time.perf_counter()
         transcript = await self.transcription_client.create(
             file=file,
