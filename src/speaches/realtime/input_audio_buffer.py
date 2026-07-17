@@ -81,11 +81,12 @@ class InputAudioBuffer:
     def data_w_vad_applied(self) -> NDArray[np.float32]:
         if self.vad_state.audio_start_ms is None:
             return self.data
+        audio_start = self.vad_state.audio_start_ms * MS_SAMPLE_RATE
+        if self.vad_state.audio_end_ms is not None:
+            audio_end = self.vad_state.audio_end_ms * MS_SAMPLE_RATE
         else:
-            assert self.vad_state.audio_end_ms is not None
-            return self.data[
-                self.vad_state.audio_start_ms * MS_SAMPLE_RATE : self.vad_state.audio_end_ms * MS_SAMPLE_RATE
-            ]
+            audio_end = len(self.data)
+        return self.data[audio_start:audio_end]
 
 
 class InputAudioBufferManager:
