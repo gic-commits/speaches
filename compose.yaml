@@ -18,8 +18,7 @@ services:
           path: ./src
           target: /home/ubuntu/speaches/src
     env_file:
-      - path: .env
-        required: false
+      - .env
     healthcheck:
       test: ["CMD", "curl", "--fail", "http://0.0.0.0:8000/health"] # TODO: won't work if a user changes the port
       interval: 30s
