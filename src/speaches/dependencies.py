@@ -145,9 +145,9 @@ CompletionClientDependency = Annotated[AsyncCompletions, Depends(get_completion_
 def get_speech_client() -> AsyncSpeech:
     config = get_config()
     host = "127.0.0.1" if config.host in ("0.0.0.0", "::") else config.host
-    http_client = AsyncClient(
-        base_url=f"http://{host}:{config.port}/v1",
-    )
+    base_url = f"http://{host}:{config.port}/v1"
+    logger.info(f"Creating speech client with base_url={base_url}")
+    http_client = AsyncClient(base_url=base_url)
     oai_client = AsyncOpenAI(
         http_client=http_client,
         api_key=config.api_key.get_secret_value() if config.api_key else "cant-be-empty",
@@ -167,9 +167,9 @@ SpeechClientDependency = Annotated[AsyncSpeech, Depends(get_speech_client_async)
 def get_transcription_client() -> AsyncTranscriptions:
     config = get_config()
     host = "127.0.0.1" if config.host in ("0.0.0.0", "::") else config.host
-    http_client = AsyncClient(
-        base_url=f"http://{host}:{config.port}/v1",
-    )
+    base_url = f"http://{host}:{config.port}/v1"
+    logger.info(f"Creating transcription client with base_url={base_url}")
+    http_client = AsyncClient(base_url=base_url)
     oai_client = AsyncOpenAI(
         http_client=http_client,
         api_key=config.api_key.get_secret_value() if config.api_key else "cant-be-empty",
