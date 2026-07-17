@@ -16,13 +16,13 @@ from fastapi.exception_handlers import (
     http_exception_handler,
 )
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import RedirectResponse
 
 from speaches.dependencies import ApiKeyDependency, get_config, get_executor_registry
-from speaches.logger import setup_logger
+from speaches.logger import ring_buffer_handler, setup_logger
 from speaches.routers.chat import (
     router as chat_router,
 )
@@ -185,6 +185,12 @@ def create_app() -> FastAPI:
     # HACK: move this elsewhere
     app.get("/v1/realtime", include_in_schema=False)(lambda: RedirectResponse(url="/v1/realtime/"))
     app.mount("/v1/realtime", StaticFiles(directory="realtime-console/dist", html=True))
+
+    @app.get("/v1/logs")
+    async def get_logs(lines: int = 200) -> HTMLResponse:
+        log_lines = ring_buffer_handler.get_logs(lines)
+        html = "<html><body><pre>" + "\n".join(log_lines) + "</pre></body></html>"
+        return HTMLResponse(html)
 
     if config.allow_origins is not None:
         app.add_middleware(
