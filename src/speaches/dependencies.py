@@ -144,10 +144,10 @@ CompletionClientDependency = Annotated[AsyncCompletions, Depends(get_completion_
 @lru_cache
 def get_speech_client() -> AsyncSpeech:
     config = get_config()
-    from speaches.main import app
+    from speaches.routers.speech import router as speech_router
 
     http_client = AsyncClient(
-        transport=ASGITransport(app),
+        transport=ASGITransport(speech_router),
         base_url="http://test/v1",
     )
     oai_client = AsyncOpenAI(
@@ -168,10 +168,10 @@ SpeechClientDependency = Annotated[AsyncSpeech, Depends(get_speech_client_async)
 @lru_cache
 def get_transcription_client() -> AsyncTranscriptions:
     config = get_config()
-    from speaches.main import app
+    from speaches.routers.stt import router as stt_router
 
     http_client = AsyncClient(
-        transport=ASGITransport(app),
+        transport=ASGITransport(stt_router),
         base_url="http://test/v1",
     )
     oai_client = AsyncOpenAI(
