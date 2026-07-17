@@ -14,7 +14,7 @@ from fastapi import (
 )
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from faster_whisper.audio import decode_audio
-from httpx import ASGITransport, AsyncClient
+from httpx import AsyncClient
 import numpy as np
 from numpy import float32
 from openai import AsyncOpenAI
@@ -144,11 +144,9 @@ CompletionClientDependency = Annotated[AsyncCompletions, Depends(get_completion_
 @lru_cache
 def get_speech_client() -> AsyncSpeech:
     config = get_config()
-    from speaches.routers.speech import router as speech_router
-
+    host = "127.0.0.1" if config.host in ("0.0.0.0", "::") else config.host
     http_client = AsyncClient(
-        transport=ASGITransport(speech_router),
-        base_url="http://test/v1",
+        base_url=f"http://{host}:{config.port}/v1",
     )
     oai_client = AsyncOpenAI(
         http_client=http_client,
@@ -168,11 +166,9 @@ SpeechClientDependency = Annotated[AsyncSpeech, Depends(get_speech_client_async)
 @lru_cache
 def get_transcription_client() -> AsyncTranscriptions:
     config = get_config()
-    from speaches.routers.stt import router as stt_router
-
+    host = "127.0.0.1" if config.host in ("0.0.0.0", "::") else config.host
     http_client = AsyncClient(
-        transport=ASGITransport(stt_router),
-        base_url="http://test/v1",
+        base_url=f"http://{host}:{config.port}/v1",
     )
     oai_client = AsyncOpenAI(
         http_client=http_client,
