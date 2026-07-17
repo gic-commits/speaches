@@ -156,12 +156,18 @@ class InputAudioBufferTranscriber:
         logger.info(f"Transcription _handler started: model={self.session.input_audio_transcription.model}, language={self.session.input_audio_transcription.language}, input_audio_duration={self.input_audio_buffer.duration:.2f}s, wav_size={file_size}")
         start = time.perf_counter()
         try:
-            transcript = await self.transcription_client.create(
-                file=file,
-                model=self.session.input_audio_transcription.model,
-                response_format="text",
-                language=self.session.input_audio_transcription.language or omit,
+            transcript = await asyncio.wait_for(
+                self.transcription_client.create(
+                    file=file,
+                    model=self.session.input_audio_transcription.model,
+                    response_format="text",
+                    language=self.session.input_audio_transcription.language or omit,
+                ),
+                timeout=60.0,
             )
+        except asyncio.TimeoutError:
+            logger.error(f"Transcription timed out after 60s")
+            return
         except Exception as e:
             logger.exception(f"transcription_client.create() failed after {time.perf_counter() - start:.2f}s: {e}")
             return

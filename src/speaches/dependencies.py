@@ -14,7 +14,7 @@ from fastapi import (
 )
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from faster_whisper.audio import decode_audio
-from httpx import AsyncClient
+from httpx import ASGITransport, AsyncClient, Timeout
 import numpy as np
 from numpy import float32
 from openai import AsyncOpenAI
@@ -143,11 +143,19 @@ CompletionClientDependency = Annotated[AsyncCompletions, Depends(get_completion_
 
 @lru_cache
 def get_speech_client() -> AsyncSpeech:
+    from fastapi import FastAPI
+
+    from speaches.routers.speech import router as speech_router
+
     config = get_config()
-    host = "127.0.0.1" if config.host in ("0.0.0.0", "::") else config.host
-    base_url = f"http://{host}:{config.port}/v1"
-    logger.info(f"Creating speech client with base_url={base_url}")
-    http_client = AsyncClient(base_url=base_url)
+    tmp_app = FastAPI()
+    tmp_app.include_router(speech_router)
+    http_client = AsyncClient(
+        transport=ASGITransport(app=tmp_app),
+        base_url="http://test",
+        timeout=Timeout(60.0, connect=5.0),
+    )
+    logger.info(f"Creating speech client with ASGITransport")
     oai_client = AsyncOpenAI(
         http_client=http_client,
         api_key=config.api_key.get_secret_value() if config.api_key else "cant-be-empty",
@@ -165,11 +173,19 @@ SpeechClientDependency = Annotated[AsyncSpeech, Depends(get_speech_client_async)
 
 @lru_cache
 def get_transcription_client() -> AsyncTranscriptions:
+    from fastapi import FastAPI
+
+    from speaches.routers.stt import router as stt_router
+
     config = get_config()
-    host = "127.0.0.1" if config.host in ("0.0.0.0", "::") else config.host
-    base_url = f"http://{host}:{config.port}/v1"
-    logger.info(f"Creating transcription client with base_url={base_url}")
-    http_client = AsyncClient(base_url=base_url)
+    tmp_app = FastAPI()
+    tmp_app.include_router(stt_router)
+    http_client = AsyncClient(
+        transport=ASGITransport(app=tmp_app),
+        base_url="http://test",
+        timeout=Timeout(60.0, connect=5.0),
+    )
+    logger.info(f"Creating transcription client with ASGITransport")
     oai_client = AsyncOpenAI(
         http_client=http_client,
         api_key=config.api_key.get_secret_value() if config.api_key else "cant-be-empty",
