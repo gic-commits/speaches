@@ -152,14 +152,21 @@ class InputAudioBufferTranscriber:
             format="wav",
         )
         file.seek(0)
+        file_size = file.getbuffer().nbytes
+        logger.info(f"Transcription _handler started: model={self.session.input_audio_transcription.model}, language={self.session.input_audio_transcription.language}, input_audio_duration={self.input_audio_buffer.duration:.2f}s, wav_size={file_size}")
         start = time.perf_counter()
-        transcript = await self.transcription_client.create(
-            file=file,
-            model=self.session.input_audio_transcription.model,
-            response_format="text",
-            language=self.session.input_audio_transcription.language or omit,
-        )
-        logger.info(f"Transcription generation took {time.perf_counter() - start:.2f} seconds")
+        try:
+            transcript = await self.transcription_client.create(
+                file=file,
+                model=self.session.input_audio_transcription.model,
+                response_format="text",
+                language=self.session.input_audio_transcription.language or omit,
+            )
+        except Exception as e:
+            logger.exception(f"transcription_client.create() failed after {time.perf_counter() - start:.2f}s: {e}")
+            return
+        elapsed = time.perf_counter() - start
+        logger.info(f"Transcription done in {elapsed:.2f}s, transcript_length={len(transcript) if transcript else 0}")
         content_item.transcript = transcript
         self.pubsub.publish_nowait(
             ConversationItemInputAudioTranscriptionCompletedEvent(
