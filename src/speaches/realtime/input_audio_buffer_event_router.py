@@ -154,7 +154,7 @@ async def commit_and_transcribe(ctx: SessionContext, item_id: str) -> None:
 
     transcriber = InputAudioBufferTranscriber(
         pubsub=ctx.pubsub,
-        transcription_client=ctx.transcription_client,
+        executor_registry=ctx.executor_registry,
         input_audio_buffer=input_audio_buffer,
         session=ctx.session,
         conversation=ctx.conversation,
