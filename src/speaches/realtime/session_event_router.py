@@ -6,10 +6,12 @@ from typing import TYPE_CHECKING
 from speaches.realtime.event_router import EventRouter
 from speaches.types.realtime import (
     NOT_GIVEN,
+    ErrorEvent,
     Session,
     SessionUpdatedEvent,
     SessionUpdateEvent,
     TurnDetection,
+    create_invalid_request_error,
 )
 
 if TYPE_CHECKING:
@@ -29,12 +31,18 @@ def update_dict(original: dict, updates: dict) -> dict:
     return original
 
 
+def unsupported_field_error(field: str) -> ErrorEvent:
+    return create_invalid_request_error(
+        message=f"Specifying `{field}` is not supported. The server either does not support this field or it is not configurable.",
+    )
+
+
 @event_router.register("session.update")
 def handle_session_update_event(ctx: SessionContext, event: SessionUpdateEvent) -> None:
     if event.session.input_audio_format != NOT_GIVEN:
-        logger.warning("Specifying `session.input_audio_format` is not supported. Ignoring.")
+        ctx.pubsub.publish_nowait(unsupported_field_error("session.input_audio_format"))
     if event.session.output_audio_format != NOT_GIVEN:
-        logger.warning("Specifying `session.output_audio_format` is not supported. Ignoring.")
+        ctx.pubsub.publish_nowait(unsupported_field_error("session.output_audio_format"))
     if (
         event.session.turn_detection is not None
         and isinstance(event.session.turn_detection, TurnDetection)
