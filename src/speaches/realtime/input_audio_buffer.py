@@ -2,20 +2,22 @@ from __future__ import annotations
 
 import asyncio
 from collections import OrderedDict
-from io import BytesIO
 import logging
 import time
 from typing import TYPE_CHECKING
 
 import numpy as np
-from openai import omit
 from openai.types.realtime.conversation_item_input_audio_transcription_completed_event import (
     UsageTranscriptTextUsageDuration,
 )
 from pydantic import BaseModel
-import soundfile as sf
 
+from speaches.audio import Audio
+from speaches.dependencies import get_executor_registry
+from speaches.executors.shared.handler_protocol import TranscriptionRequest, VadRequest
+from speaches.executors.silero_vad_v5 import VadOptions
 from speaches.realtime.utils import generate_item_id, task_done_callback
+from speaches.routers.utils import find_executor_for_model_or_raise, get_model_card_data_or_raise
 from speaches.types.realtime import (
     ConversationItemContentInputAudio,
     ConversationItemInputAudioTranscriptionCompletedEvent,
@@ -26,8 +28,8 @@ from speaches.types.realtime import (
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
-    from openai.resources.audio import AsyncTranscriptions
 
+    from speaches.executors.shared.registry import ExecutorRegistry
     from speaches.realtime.conversation_event_router import Conversation
     from speaches.realtime.pubsub import EventPubSub
 
@@ -35,7 +37,42 @@ SAMPLE_RATE = 16000
 MS_SAMPLE_RATE = 16
 MAX_VAD_WINDOW_SIZE_SAMPLES = 3000 * MS_SAMPLE_RATE
 
+DEFAULT_VAD_OPTIONS = VadOptions(min_silence_duration_ms=160, max_speech_duration_s=30)
+
 logger = logging.getLogger(__name__)
+
+
+def _transcribe_sync(
+    audio_data: NDArray[np.float32],
+    model: str,
+    language: str | None,
+) -> str:
+    executor_registry = get_executor_registry()
+    audio = Audio(audio_data, sample_rate=16000)
+
+    model_card_data = get_model_card_data_or_raise(model)
+    transcription_executor = find_executor_for_model_or_raise(
+        model, model_card_data, executor_registry.transcription
+    )
+
+    vad_request = VadRequest(audio=audio, vad_options=DEFAULT_VAD_OPTIONS)
+    speech_segments = executor_registry.vad.model_manager.handle_vad_request(vad_request)
+
+    transcription_request = TranscriptionRequest(
+        audio=audio,
+        model=model,
+        language=language,
+        response_format="text",
+        temperature=0.0,
+        timestamp_granularities=["segment"],
+        speech_segments=speech_segments,
+        vad_options=DEFAULT_VAD_OPTIONS,
+    )
+    result = transcription_executor.model_manager.handle_transcription_request(transcription_request)
+
+    if isinstance(result, tuple):
+        return result[0]
+    return str(result)
 
 
 # NOTE not in `src/speaches/realtime/input_audio_buffer_event_router.py` due to circular import
@@ -118,13 +155,13 @@ class InputAudioBufferTranscriber:
         self,
         *,
         pubsub: EventPubSub,
-        transcription_client: AsyncTranscriptions,
+        executor_registry: ExecutorRegistry,
         input_audio_buffer: InputAudioBuffer,
         session: Session,
         conversation: Conversation,
     ) -> None:
         self.pubsub = pubsub
-        self.transcription_client = transcription_client
+        self.executor_registry = executor_registry
         self.input_audio_buffer = input_audio_buffer
         self.session = session
         self.conversation = conversation
@@ -138,30 +175,23 @@ class InputAudioBufferTranscriber:
             id=self.input_audio_buffer.id,
             role="user",
             content=[content_item],
-            status="completed",  # `status == "completed"` as that's what OpenAI sends
+            status="completed",
         )
         self.conversation.create_item(item)
 
-        file = BytesIO()
-        sf.write(
-            file,
-            self.input_audio_buffer.data_w_vad_applied,
-            samplerate=16000,
-            subtype="PCM_16",
-            endian="LITTLE",
-            format="wav",
-        )
-        file.seek(0)
-        file_size = file.getbuffer().nbytes
-        logger.info(f"Transcription _handler started: model={self.session.input_audio_transcription.model}, language={self.session.input_audio_transcription.language}, input_audio_duration={self.input_audio_buffer.duration:.2f}s, wav_size={file_size}")
+        audio_data = self.input_audio_buffer.data_w_vad_applied.copy()
+        file_size = audio_data.nbytes * 2
+        logger.info(f"Transcription _handler started: model={self.session.input_audio_transcription.model}, language={self.session.input_audio_transcription.language}, input_audio_duration={self.input_audio_buffer.duration:.2f}s, audio_size={file_size}")
         start = time.perf_counter()
         try:
+            loop = asyncio.get_running_loop()
             transcript = await asyncio.wait_for(
-                self.transcription_client.create(
-                    file=file,
-                    model=self.session.input_audio_transcription.model,
-                    response_format="text",
-                    language=self.session.input_audio_transcription.language or omit,
+                loop.run_in_executor(
+                    None,
+                    _transcribe_sync,
+                    audio_data,
+                    self.session.input_audio_transcription.model,
+                    self.session.input_audio_transcription.language,
                 ),
                 timeout=60.0,
             )
@@ -169,7 +199,7 @@ class InputAudioBufferTranscriber:
             logger.error(f"Transcription timed out after 60s")
             return
         except Exception as e:
-            logger.exception(f"transcription_client.create() failed after {time.perf_counter() - start:.2f}s: {e}")
+            logger.exception(f"Transcription failed after {time.perf_counter() - start:.2f}s: {e}")
             return
         elapsed = time.perf_counter() - start
         logger.info(f"Transcription done in {elapsed:.2f}s, transcript_length={len(transcript) if transcript else 0}")
