@@ -249,7 +249,7 @@ class ResponseDoneEvent(BaseModel):
 # Same as openai.types.realtime.session_update_event.SessionTurnDetection but with all the fields made non-nullable
 class TurnDetection(BaseModel):
     create_response: bool
-    prefix_padding_ms: int
+    prefix_padding_ms: int | NotGiven = NOT_GIVEN
     silence_duration_ms: int
     threshold: float = Field(..., ge=0.0, le=1.0)
     type: Literal["server_vad"] = "server_vad"
