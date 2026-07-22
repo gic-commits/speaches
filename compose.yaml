@@ -10,6 +10,10 @@ services:
     restart: unless-stopped
     ports:
       - 8000:8000
+    environment:
+      - WHISPER__CPU_THREADS=2
+      - WHISPER__NUM_WORKERS=2
+      - OMP_NUM_THREADS=2
     develop:
       watch:
         - action: rebuild

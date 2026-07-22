@@ -11,5 +11,8 @@ services:
         BASE_IMAGE: ubuntu:24.04
     volumes:
       - hf-hub-cache:/home/ubuntu/.cache/huggingface/hub
+    mem_limit: 16g
+    cpu_shares: 1024
+
 volumes:
   hf-hub-cache:

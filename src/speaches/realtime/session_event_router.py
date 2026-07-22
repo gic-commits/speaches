@@ -39,9 +39,12 @@ def unsupported_field_error(field: str) -> ErrorEvent:
 
 @event_router.register("session.update")
 def handle_session_update_event(ctx: SessionContext, event: SessionUpdateEvent) -> None:
+    logger.info(f"session.update received: {event.session.model_dump(exclude_defaults=True, exclude_none=True)}")
     if event.session.input_audio_format != NOT_GIVEN:
+        logger.warning("Client sent unsupported field session.input_audio_format, sending error event")
         ctx.pubsub.publish_nowait(unsupported_field_error("session.input_audio_format"))
     if event.session.output_audio_format != NOT_GIVEN:
+        logger.warning("Client sent unsupported field session.output_audio_format, sending error event")
         ctx.pubsub.publish_nowait(unsupported_field_error("session.output_audio_format"))
     if (
         event.session.turn_detection is not None
@@ -49,7 +52,6 @@ def handle_session_update_event(ctx: SessionContext, event: SessionUpdateEvent) 
         and event.session.turn_detection.prefix_padding_ms != NOT_GIVEN
     ):
         logger.warning("Specifying `session.turn_detection.prefix_padding_ms` is not supported. Ignoring.")
-
     session_dict = ctx.session.model_dump()
     session_update_dict = event.session.model_dump(
         exclude_defaults=True,
