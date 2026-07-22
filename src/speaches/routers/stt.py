@@ -102,13 +102,13 @@ async def get_timestamp_granularities(request: Request) -> TimestampGranularitie
 def transcription_response_to_http_response(
     res: NonStreamingTranscriptionResponse | Generator[StreamingTranscriptionEvent],
 ) -> Response | StreamingResponse:
-    logger.error(f"Unexpected streaming transcription response type: {type(res)}")
     if isinstance(res, tuple):
         text, media_type = res
         return Response(content=text, media_type=media_type)
-    elif isinstance(res, (openai.types.audio.Transcription, openai.types.audio.TranscriptionVerbose)):
+    elif hasattr(res, "model_dump_json"):
         return Response(content=res.model_dump_json(), media_type="application/json")
     else:
+        logger.error(f"Unexpected streaming transcription response type: {type(res)}")
         return StreamingResponse(
             (format_as_sse(x.model_dump_json()) for x in res),
             media_type="text/event-stream",

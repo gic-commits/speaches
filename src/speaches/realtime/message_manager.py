@@ -103,14 +103,28 @@ class WsClientMessageManager(BaseMessageManager):
 
 
 class WsServerMessageManager(BaseMessageManager):
+    async def run(self, ws: fastapi.WebSocket) -> None:
+        logger.info("[CLOSE-DIRECTION] run() started, awaiting receiver task")
+        async with asyncio.TaskGroup() as tg:
+            receiver_task = tg.create_task(self.receiver(ws), name="receiver")
+            sender_task = tg.create_task(self.sender(ws), name="sender")
+
+            receiver_task.add_done_callback(task_done_callback)
+            sender_task.add_done_callback(task_done_callback)
+
+            await receiver_task
+            logger.info("[CLOSE-DIRECTION] run() detected: receiver exited first — client stopped sending or proxy killed connection")
+            sender_task.cancel()
+        logger.info("[CLOSE-DIRECTION] run() finished — connection fully closed")
+
     async def receiver(self, ws: fastapi.WebSocket) -> None:
         logger.info("Receiver task started")
         while True:
             try:
                 # logger.debug("Waiting for event")
                 data = await ws.receive_text()
-            except fastapi.WebSocketDisconnect:
-                logger.info("Failed to receive message due to disconnect")
+            except fastapi.WebSocketDisconnect as e:
+                logger.info(f"[CLOSE-DIRECTION] Receiver: remote peer (client/proxy) sent Close frame: code={e.code}, reason={e.reason}")
                 break
             try:
                 event = client_event_type_adapter.validate_json(data)
@@ -121,6 +135,7 @@ class WsServerMessageManager(BaseMessageManager):
 
             self.event_pubsub.publish_nowait(event)
             # logger.debug(f"Received {event.type} event")
+        logger.info("Receiver task finished")
 
     async def sender(self, ws: fastapi.WebSocket) -> None:
         logger.info("Sender task started")
@@ -136,8 +151,12 @@ class WsServerMessageManager(BaseMessageManager):
                     logger.debug(f"Sending {event.type} event")
                     await ws.send_text(server_event.model_dump_json())
                     logger.info(f"Sent {event.type} event")
-                except fastapi.WebSocketDisconnect:
-                    logger.info("Failed to send message due to disconnect")
+                except fastapi.WebSocketDisconnect as e:
+                    logger.info(f"[CLOSE-DIRECTION] Sender: connection lost while sending (client already closed?): code={e.code}, reason={e.reason}, last_event={event.type}")
                     break
+        except asyncio.CancelledError:
+            logger.info("Sender task cancelled (receiver exited first)")
+            raise
         finally:
             self.event_pubsub.subscribers.remove(q)
+            logger.info("Sender task finished")

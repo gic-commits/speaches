@@ -1,3 +1,4 @@
+import asyncio
 import base64
 from io import BytesIO
 import logging
@@ -31,6 +32,7 @@ from speaches.types.realtime import (
 )
 
 MIN_AUDIO_BUFFER_DURATION_MS = 100  # based on the OpenAI's API response
+MAX_SPEECH_DURATION_MS = 30000  # force-split continuous speech after 30s
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +81,6 @@ def vad_detection_flow(
 
     else:  # noqa: PLR5501
         if speech_timestamp is None:
-            # TODO: not quite correct. dependent on window size
             input_audio_buffer.vad_state.audio_end_ms = (
                 input_audio_buffer.duration_ms - turn_detection.prefix_padding_ms
             )
@@ -92,7 +93,15 @@ def vad_detection_flow(
             input_audio_buffer.vad_state.audio_end_ms = (
                 input_audio_buffer.duration_ms - turn_detection.prefix_padding_ms
             )
+            return InputAudioBufferSpeechStoppedEvent(
+                item_id=input_audio_buffer.id,
+                audio_end_ms=input_audio_buffer.vad_state.audio_end_ms,
+            )
 
+        elif input_audio_buffer.duration_ms - input_audio_buffer.vad_state.audio_start_ms > MAX_SPEECH_DURATION_MS:
+            input_audio_buffer.vad_state.audio_end_ms = (
+                input_audio_buffer.duration_ms - turn_detection.prefix_padding_ms
+            )
             return InputAudioBufferSpeechStoppedEvent(
                 item_id=input_audio_buffer.id,
                 audio_end_ms=input_audio_buffer.vad_state.audio_end_ms,

@@ -13,6 +13,7 @@ from speaches.dependencies import (
     ConfigDependency,
     ExecutorRegistryDependency,
 )
+
 from speaches.realtime.context import SessionContext
 from speaches.realtime.conversation_event_router import event_router as conversation_event_router
 from speaches.realtime.event_router import EventRouter

@@ -22,6 +22,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import RedirectResponse
 
 from speaches.dependencies import ApiKeyDependency, get_config, get_executor_registry
+from speaches.routers.utils import find_executor_for_model_or_raise, get_model_card_data_or_raise
 from speaches.logger import ring_buffer_handler, setup_logger
 from speaches.routers.chat import (
     router as chat_router,
@@ -94,6 +95,21 @@ async def lifespan(_app: FastAPI) -> AsyncGenerator[None, None]:
             logger.info(f"Downloading model: {model_id}")
             executor_registry.download_model_by_id(model_id)
             logger.info(f"Successfully downloaded model: {model_id}")
+
+        for model_id in config.preload_models:
+            logger.info(f"Loading model: {model_id}")
+            try:
+                transcription_executor = find_executor_for_model_or_raise(
+                    model_id,
+                    get_model_card_data_or_raise(model_id),
+                    executor_registry.transcription,
+                )
+                model_wrapper = transcription_executor.model_manager.load_model(model_id)
+                with model_wrapper:
+                    pass
+                logger.info(f"Successfully loaded model: {model_id}")
+            except Exception:
+                logger.exception(f"Failed to load model: {model_id}")
 
     yield
 

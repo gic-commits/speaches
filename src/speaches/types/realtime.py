@@ -394,6 +394,16 @@ class ConversationItemInputAudioTranscriptionCompletedEvent(
     content_index: int = 0
 
 
+class ConversationItemInputAudioTranscriptionDeltaEvent(BaseModel):
+    type: Literal["conversation.item.input_audio_transcription.delta"] = (
+        "conversation.item.input_audio_transcription.delta"
+    )
+    event_id: str = Field(default_factory=generate_event_id)
+    item_id: str
+    delta: str
+    content_index: int = 0
+
+
 class ConversationItemInputAudioTranscriptionFailedEvent(OpenAIConversationItemInputAudioTranscriptionFailedEvent):
     type: Literal["conversation.item.input_audio_transcription.failed"] = (
         "conversation.item.input_audio_transcription.failed"
@@ -546,6 +556,7 @@ type ConversationServerEvent = (
     | ConversationItemAddedEvent
     | ConversationItemDoneEvent
     | ConversationItemRetrievedEvent
+    | ConversationItemInputAudioTranscriptionDeltaEvent
     | ConversationItemInputAudioTranscriptionCompletedEvent
     | ConversationItemInputAudioTranscriptionFailedEvent
     | ConversationItemTruncatedEvent
@@ -613,6 +624,7 @@ SERVER_EVENT_TYPES = {
     "conversation.item.done",
     "conversation.item.retrieved",
     "conversation.item.input_audio_transcription.completed",
+    "conversation.item.input_audio_transcription.delta",
     "conversation.item.input_audio_transcription.failed",
     "conversation.item.truncated",
     "conversation.item.deleted",
