@@ -11,8 +11,15 @@ services:
         BASE_IMAGE: ubuntu:24.04
     volumes:
       - hf-hub-cache:/home/ubuntu/.cache/huggingface/hub
+      - /volume1/docker/speachcomp/data/model_aliases.json:/home/ubuntu/speaches/model_aliases.json
     mem_limit: 16g
     cpu_shares: 1024
+    network_mode: "bridge"
+    environment:
+      - HTTP_PROXY=http://172.17.0.1:28080
+      - HTTPS_PROXY=http://172.17.0.1:28080
+      - http_proxy=http://172.17.0.1:28080
+      - https_proxy=http://172.17.0.1:28080
 
 volumes:
   hf-hub-cache:

@@ -1,6 +1,6 @@
 services:
   speaches:
-    container_name: speaches
+    container_name: speaches2
     build:
       dockerfile: Dockerfile
       context: .
