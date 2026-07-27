@@ -304,3 +304,72 @@ ASGITransport 路径死锁问题。`_handler()` 绕过 HTTP/ASGI，直接调用 
 - **CPU 推理慢**：`Systran/faster-whisper-small` 模型在 N100 CPU 上约 5x 实时（4.5s 音频需 ~20s 推理）。可换 `tiny`/`base` 模型优化，或启用 GPU。
 - **samples_dropped**：客户端 WebSocket 发送线程消费 ring buffer 跟不上麦克风硬件写入，属客户端侧优化项，不影响功能。
 - **块顺序依赖**：当前串行处理（信号量=1），一次只能处理一个 utterance 的块。多段语音排队时长 = sum(各段块数 × 推理耗时)。
+
+---
+
+## 2026-07-27 第 9 轮：中文后处理实现 + HTTP 500 日志 + Bug 修复
+
+### 新增功能
+
+#### 1. CJK 混合分词管线（`cjk_post_processor.py`）
+
+基于设计文档实现 4 层后处理管线：
+
+| 层 | 功能 | 实现 |
+|---|------|------|
+| Layer 1 | Gap 标点检测 | `_detect_punctuation` — gap >= 0.80s → 。, >= 0.25s → ， |
+| Layer 2 | jieba 分词 | `_jieba_segment` — 调用 jieba.tokenize 做词组切割 |
+| Layer 3 | 声学验证 + OOV 合并 | `_acoustic_verify` + `_try_merge_oov_span` — 信任已知词，单字序列滑动窗口自适应阈值合并 |
+| Layer 4 | 输出重建 | `_build_output` — 生成带空格的词组文本，插入标点 |
+
+集成入口：`apply_to_verbose_json()` 在 `segments_to_transcription_response()` 的 verbose_json 分支调用。
+
+#### 2. 领域词典管理 API（`routers/domain_dict.py`）
+
+| 端点 | 功能 |
+|------|------|
+| `GET /v1/domain-dict` | 列出所有已加载的词典源 |
+| `POST /v1/domain-dict/load` | 从 URL 下载并加载外部词典 |
+| `GET /v1/domain-dict/sources` | 同 GET /v1/domain-dict |
+| `DELETE /v1/domain-dict/sources/{name}` | 卸载指定词典 |
+
+内置词典：`jieba_domain_dict.txt`（445 条，IT/通信/AI 领域术语）。
+
+#### 3. DictManager 单例（`cjk_post_processor.py`）
+
+管理内置 + 用户路径 + 外部 URL 三种词典来源，模块级全局实例 `dict_manager`。
+
+### Bug 修复
+
+| Bug | 根因 | 修复 |
+|-----|------|------|
+| **HTTP 500 无日志** | FastAPI 默认不记录未捕获异常 | `main.py` 新增全局 `Exception` handler，输出完整 traceback |
+| **CJK 后处理抛 TypeError** | `jieba.tokenize()` 返回 `(word, start, end)`，代码写成 `(start_pos, end_pos, word)` | 修正解包顺序 |
+| **CJK 后处理 IndexError** | `jieba` 返回**字符偏移**，但代码用其直接索引 `words` 数组（whisper word 索引，长度不匹配） | 新增 `_build_char_to_word` 映射，将字符偏移转为 word 索引 |
+
+### 其他修复
+
+- `apply_to_verbose_json` 包裹 try-except，CJK 后处理失败不阻塞响应
+- `transcribe_file` 中转录和响应构建各自包 try-except + 详细日志
+- `compose.cpu.yaml`: 添加 `UNSTABLE_ORT_OPTS__EXCLUDE_PROVIDERS` 排除 CUDAExecutionProvider（NAS 无 GPU）
+
+### 变更文件
+
+| 文件 | 改动 |
+|------|------|
+| `src/speaches/cjk_post_processor.py` | 新增（646 行）：4 层分词管线 + DictManager |
+| `src/speaches/jieba_domain_dict.txt` | 新增（445 条领域词典） |
+| `src/speaches/routers/domain_dict.py` | 新增：词典管理 REST API |
+| `src/speaches/executors/whisper.py` | 集成 `apply_to_verbose_json`；CJK 处理加 try-except |
+| `src/speaches/main.py` | 注册 domain-dict 路由；新增全局 Exception handler |
+| `src/speaches/routers/stt.py` | 转录/响应构建加 try-except + 日志 |
+| `pyproject.toml` / `uv.lock` | 新增 `jieba>=0.42.1` |
+| `compose.cpu.yaml` | 排除 CUDAExecutionProvider |
+| `docs/transcription_hybrid_segmentation_design.md` | 完整设计文档 |
+| `docs/transcription_word_segmentation_research.md` | 统计研究报告 |
+
+### 待验证
+
+- [ ] 批量转写长中文音频（>= 4 分钟）无 500
+- [ ] 客户端确认 HTTP 响应正常返回
+- [ ] domain-dict API 正常工作

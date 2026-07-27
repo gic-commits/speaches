@@ -1,6 +1,6 @@
 # 中文连续语音识别后处理：基于时长特征的字词边界还原算法
 
-> 研究日期：2026-07-27
+> 研究日期：2026-07-27（实际实现见 `transcription_hybrid_segmentation_design.md` 及 `cjk_post_processor.py`）
 > 语料来源：Tauri 语音识别插件（tauri_plugin_transcription）BatchRuntime 模式
 > 引擎类型：基于词的流式 ASR（Deepgram 兼容协议），timing_source = provider_word
 
@@ -514,6 +514,20 @@ impl WordSegmenter {
 2. **韵律特征扩展**：引入基频（F0）和能量特征，词首字通常伴随基频重置
 3. **三字词专用规则**：对 `C₁C₂C₃` 序列，若 `dur₂ < dur₁ × 0.7 且 dur₃ < dur₁` → 三字同词
 4. **用户校准**：提供校准界面，让用户标记少量样本后自动调参
+
+### 9.3 实现状态
+
+| Level | 研究文档 | 实际实现 (`cjk_post_processor.py`) |
+|-------|---------|-----------------------------------|
+| Level 1: Gap 断句 | §6.2 | `_detect_punctuation` ✓ |
+| Level 2: 功能字边界 | §6.3 | 由 jieba 分词隐式处理（功能字自动独立） |
+| Level 3: 自适应时长比 | §6.4 (核心算法) | **未直接实现**。替代方案：jieba 词典分词（已知词） + `_acoustic_verify` / `_try_merge_oov_span`（未知词后备） |
+| Level 4: 输出重建 | §6.5 | `_build_output` ✓ |
+
+> Level 3 的纯声学方案（滑动窗口 + 中位数基准 + 自适应阈值）被 jieba 混合方案取代，原因：
+> - 已知词覆盖率 > 95%（词典保障），不需要声学判定
+> - 约 30% 自然词存在时长反转（尾字 > 首字），纯声学方案准确率有限
+> - 纯声学方案作为 OOV 后备保留（`_try_merge_oov_span`）
 
 ---
 

@@ -1,6 +1,6 @@
 # 中文连续语音识别后处理：混合分词方案设计
 
-> 日期：2026-07-27
+> 日期：2026-07-27（已实现，详见 `memo-changelog.md` 第 9 轮）
 > 基于两份前置研究的综合设计：
 > - 统计研究报告：基于时长特征的字词边界还原算法（`transcription_word_segmentation_research.md`）
 > - 工程实践方案：jieba 词典分词 + 字级时间戳对齐
@@ -184,24 +184,25 @@ for i from 1 to len(words)-1:
 text = "".join(w.char for w in words)
 
 # 2. jieba 分词
+# jieba.tokenize 返回 (word, start_char_pos, end_char_pos) 三元组
+# 例："计算机科学" → [("计算机", 0, 3), ("科学", 3, 5)]
+# start/end 是 Unicode 字符偏移（非字节偏移）
 words_positions = list(jieba.tokenize(text))
-# [(start_pos_in_text: int, end_pos_in_text: int, word: str), ...]
-# e.g., [(0, 5, "我们"), (5, 8, "可以"), ...]
 
-# 3. 映射到字索引
-# text 中位置 pos → words 数组索引 idx
-# 由于一个字占一个 Unicode 位置，char_idx == pos
-word_boundaries = []
-last_end = 0
-for (start_pos, end_pos, jb_word) in words_positions:
-    word_boundaries.append(start_pos)  # 词组起始字的索引
-    last_end = end_pos
+# 3. 字符偏移 → word 索引映射
+# 注意：words 数组按 whisper word 索引（每个 word 可能包含多个字符），
+# jieba 返回的字符偏移不能直接用作 words 数组索引。
+# 需要建立 char_pos → word_idx 的映射：
+char_to_word = []
+for idx, w in enumerate(words):
+    char_to_word.extend([idx] * len(w.char))
 
-# 4. 记录 jieba 分词结果用于 Layer 3
-jieba_groups: list[tuple[int, int, str]] = [
-    (start_pos, end_pos, word)  # (起始字索引, 结束字索引+1, 词组文本)
-    for (start_pos, end_pos, word) in words_positions
-]
+# 4. 转换到 word 索引
+jieba_groups = []
+for (jb_word, start_pos, end_pos) in words_positions:
+    word_start = char_to_word[start_pos]
+    word_end = char_to_word[end_pos - 1] + 1  # 包含末尾字
+    jieba_groups.append((word_start, word_end, jb_word))
 ```
 
 **词典增强**：
@@ -1439,23 +1440,19 @@ function mergeSingleCharRuns(
 
 ## 9. 集成指南
 
-### 9.1 服务端集成
+### 9.1 服务端集成（已实现）
 
-在 `whisper.py` 的 `segments_to_transcription_response()` 中：
+在 `whisper.py` 的 `segments_to_transcription_response()` 中，`verbose_json` 分支内调用：
 
 ```python
-# 在构建 TranscriptionVerbose 之前插入
-result = integrate_into_transcription_response(segments, transcription_info, response_format)
-if result is not None:
-    return result
-# 否则走原有逻辑
+# 构建 response dict 后、构造 Pydantic 模型前
+try:
+    apply_to_verbose_json(resp, resp["language"])
+except Exception:
+    logger.exception("CJK post-processing failed, falling back to raw output")
 ```
 
-**依赖**：
-- `jieba` - 分词库
-- `cn2an`（可选）- 数字转中文，用于词典增强
-
-**性能影响**：对 53.9s 音频，jieba 分词 + 后处理 < 10ms，几乎无开销。
+**性能影响**：对 30s 音频，jieba 初始化约 1s（首次），后续每次处理 < 10ms，几乎无开销。
 
 ### 9.2 客户端集成（Tauri / TypeScript）
 
