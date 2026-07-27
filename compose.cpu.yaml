@@ -20,6 +20,7 @@ services:
       - HTTPS_PROXY=http://172.17.0.1:28080
       - http_proxy=http://172.17.0.1:28080
       - https_proxy=http://172.17.0.1:28080
+      - UNSTABLE_ORT_OPTS__EXCLUDE_PROVIDERS=["TensorrtExecutionProvider","CUDAExecutionProvider"]
 
 volumes:
   hf-hub-cache:
