@@ -305,7 +305,10 @@ def segments_to_transcription_response(
                 if transcription_info.transcription_options.word_timestamps
                 else None,
             }
-            apply_to_verbose_json(resp, resp["language"])
+            try:
+                apply_to_verbose_json(resp, resp["language"])
+            except Exception:
+                logger.exception("CJK post-processing failed, falling back to raw output")
             return openai.types.audio.TranscriptionVerbose(
                 language=resp["language"],
                 duration=resp["duration"],

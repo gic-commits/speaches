@@ -177,6 +177,11 @@ def create_app() -> FastAPI:
         logger.error(f"HTTP error: {exc}")
         return await http_exception_handler(request, exc)
 
+    @app.exception_handler(Exception)
+    async def _global_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+        logger.exception(f"Unhandled exception processing {request.method} {request.url.path}")
+        return JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
     # Public routers WITHOUT authentication
     app.include_router(misc_public_router)
 
