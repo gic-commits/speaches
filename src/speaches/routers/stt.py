@@ -45,10 +45,7 @@ RESPONSE_FORMATS = ("text", "json", "verbose_json", "srt", "vtt")
 DEFAULT_RESPONSE_FORMAT: ResponseFormat = "json"
 
 # NOTE: copied from `faster_whisper.transcribe`
-# Use 29.0s instead of 30s to stay safely under Whisper's strict 30s internal limit.
-# Exact 30s input (e.g. sine wave with no silence) can produce clips >= 30s after VAD padding,
-# causing the model to error. The PB client already splits at 30s boundaries.
-DEFAULT_VAD_OPTIONS = VadOptions(min_silence_duration_ms=160, max_speech_duration_s=29.0)
+DEFAULT_VAD_OPTIONS = VadOptions(min_silence_duration_ms=160, max_speech_duration_s=30)
 
 
 def translation_response_to_http_response(res: TranslationResponse) -> Response:  # noqa: RET503  # pyrefly: ignore[bad-return]
