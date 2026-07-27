@@ -12,6 +12,7 @@ from opentelemetry import trace
 from pydantic import BaseModel
 
 from speaches.api_types import Model
+from speaches.cjk_post_processor import apply_to_verbose_json
 from speaches.executors.shared.base_model_manager import BaseModelManager
 from speaches.executors.shared.handler_protocol import (  # noqa: TC001
     NonStreamingTranscriptionResponse,
@@ -277,35 +278,47 @@ def segments_to_transcription_response(
             )
 
         case "verbose_json":
-            return openai.types.audio.TranscriptionVerbose(
-                language=transcription_info.language,
-                duration=transcription_info.duration,
-                text=segments_to_text(segments),
-                segments=[
-                    openai.types.audio.TranscriptionSegment(
-                        id=segment.id,
-                        seek=segment.seek,
-                        start=segment.start,
-                        end=segment.end,
-                        text=segment.text,
-                        tokens=segment.tokens,
-                        temperature=segment.temperature or 0,  # FIX: hardcoded
-                        avg_logprob=segment.avg_logprob,
-                        compression_ratio=segment.compression_ratio,
-                        no_speech_prob=segment.no_speech_prob,
-                    )
+            resp: dict = {
+                "language": transcription_info.language,
+                "duration": transcription_info.duration,
+                "text": segments_to_text(segments),
+                "segments": [
+                    {
+                        "id": segment.id,
+                        "seek": segment.seek,
+                        "start": segment.start,
+                        "end": segment.end,
+                        "text": segment.text,
+                        "tokens": segment.tokens,
+                        "temperature": segment.temperature or 0,
+                        "avg_logprob": segment.avg_logprob,
+                        "compression_ratio": segment.compression_ratio,
+                        "no_speech_prob": segment.no_speech_prob,
+                    }
                     for segment in segments
                 ],
-                words=[
-                    openai.types.audio.TranscriptionWord(
-                        start=word.start,
-                        end=word.end,
-                        word=word.word,
-                    )
+                "words": [
+                    {"word": word.word, "start": word.start, "end": word.end}
                     for segment in segments
                     for word in (segment.words or [])
                 ]
                 if transcription_info.transcription_options.word_timestamps
+                else None,
+            }
+            apply_to_verbose_json(resp, resp["language"])
+            return openai.types.audio.TranscriptionVerbose(
+                language=resp["language"],
+                duration=resp["duration"],
+                text=resp["text"],
+                segments=[
+                    openai.types.audio.TranscriptionSegment(**s)
+                    for s in resp["segments"]
+                ],
+                words=[
+                    openai.types.audio.TranscriptionWord(**w)
+                    for w in resp["words"]
+                ]
+                if resp["words"] is not None
                 else None,
             )
 

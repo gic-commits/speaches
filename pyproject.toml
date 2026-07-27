@@ -22,6 +22,7 @@ dependencies = [
     "httpx-ws>=0.7.2",
     "aiortc>=1.13.0",
     "httpx>=0.28.1",
+    "jieba>=0.42.1",
     "onnx-asr>=0.7.0",
     "openai[realtime]>=2.7.1",
     "gradio>=5.49.1",

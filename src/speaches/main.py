@@ -33,6 +33,9 @@ from speaches.routers.deepgram import (
 from speaches.routers.diarization import (
     router as diarization_router,
 )
+from speaches.routers.domain_dict import (
+    router as domain_dict_router,
+)
 from speaches.routers.misc import (
     public_router as misc_public_router,
 )
@@ -194,6 +197,7 @@ def create_app() -> FastAPI:
     app.include_router(speech_embedding_router, dependencies=http_dependencies)
     app.include_router(vad_router, dependencies=http_dependencies)
     app.include_router(diarization_router, dependencies=http_dependencies)
+    app.include_router(domain_dict_router, dependencies=http_dependencies)
 
     # WebSocket router WITHOUT authentication (handles its own)
     app.include_router(realtime_ws_router)
