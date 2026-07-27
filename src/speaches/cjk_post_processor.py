@@ -384,18 +384,28 @@ def _detect_punctuation(
 # ─── Layer 2: jieba Segmentation ──────────────────────────
 
 
+def _build_char_to_word(words: list[WordEntry]) -> list[int]:
+    mapping: list[int] = []
+    for idx, w in enumerate(words):
+        mapping.extend([idx] * len(w.char))
+    return mapping
+
+
 def _jieba_segment(
     words: list[WordEntry],
 ) -> list[tuple[int, int, str]]:
     import jieba
 
     text = "".join(w.char for w in words)
-    # jieba.tokenize returns (word, start, end) tuples
+    # jieba.tokenize returns (word, start, end) tuples with character offsets
     positions = list(jieba.tokenize(text))
+    char_to_word = _build_char_to_word(words)
 
     groups: list[tuple[int, int, str]] = []
     for word, start_pos, end_pos in positions:
-        groups.append((start_pos, end_pos, word))
+        word_start = char_to_word[start_pos]
+        word_end = char_to_word[end_pos - 1] + 1 if end_pos > 0 else len(words)
+        groups.append((word_start, word_end, word))
 
     return groups
 
