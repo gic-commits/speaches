@@ -390,10 +390,11 @@ def _jieba_segment(
     import jieba
 
     text = "".join(w.char for w in words)
+    # jieba.tokenize returns (word, start, end) tuples
     positions = list(jieba.tokenize(text))
 
     groups: list[tuple[int, int, str]] = []
-    for start_pos, end_pos, word in positions:
+    for word, start_pos, end_pos in positions:
         groups.append((start_pos, end_pos, word))
 
     return groups
