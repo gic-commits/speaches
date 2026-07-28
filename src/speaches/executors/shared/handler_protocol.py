@@ -68,6 +68,7 @@ class TranscriptionRequest(BaseModel):
     speech_segments: list[SpeechTimestamp]
     vad_options: VadOptions
     without_timestamps: bool = True
+    cjk_post_process: bool = False
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 

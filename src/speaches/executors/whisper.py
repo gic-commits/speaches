@@ -178,6 +178,7 @@ class WhisperModelManager(BaseModelManager[WhisperModel]):
                 segments,
                 transcription_info,
                 response_format=request.response_format,
+                cjk_post_process=request.cjk_post_process,
             )
             logger.info(
                 f"Transcribed {request.audio.duration} seconds of audio in {time.perf_counter() - timelog_start} seconds"
@@ -268,6 +269,7 @@ def segments_to_transcription_response(
     segments: list[faster_whisper.transcribe.Segment],
     transcription_info: faster_whisper.transcribe.TranscriptionInfo,
     response_format: ResponseFormat,
+    cjk_post_process: bool = False,
 ) -> NonStreamingTranscriptionResponse:
     match response_format:
         case "text":
@@ -305,10 +307,11 @@ def segments_to_transcription_response(
                 if transcription_info.transcription_options.word_timestamps
                 else None,
             }
-            try:
-                apply_to_verbose_json(resp, resp["language"])
-            except Exception:
-                logger.exception("CJK post-processing failed, falling back to raw output")
+            if cjk_post_process:
+                try:
+                    apply_to_verbose_json(resp, resp["language"])
+                except Exception:
+                    logger.exception("CJK post-processing failed, falling back to raw output")
             return openai.types.audio.TranscriptionVerbose(
                 language=resp["language"],
                 duration=resp["duration"],

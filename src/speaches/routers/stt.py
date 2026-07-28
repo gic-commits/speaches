@@ -139,6 +139,8 @@ def transcribe_file(
     # non standard parameters
     hotwords: Annotated[str | None, Form()] = None,
     without_timestamps: Annotated[bool, Form()] = True,
+    # non-standard: CJK post-processing (jieba segmentation + acoustic verification)
+    cjk_post_process: Annotated[bool, Form()] = False,
 ) -> Response | StreamingResponse:
     timestamp_granularities = asyncio.run(get_timestamp_granularities(request))
     if timestamp_granularities != DEFAULT_TIMESTAMP_GRANULARITIES and response_format != "verbose_json":
@@ -167,6 +169,7 @@ def transcribe_file(
         speech_segments=speech_segments,
         vad_options=DEFAULT_VAD_OPTIONS,
         without_timestamps=without_timestamps,
+        cjk_post_process=cjk_post_process,
     )
     try:
         res = transcription_executor.model_manager.handle_transcription_request(transcription_request)
