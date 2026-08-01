@@ -56,6 +56,22 @@ def test_merge_segments_expands_clips_only() -> None:
     assert segment["end"] >= segments_list[-1].end
 
 
+def test_merge_segments_clamps_end_to_audio_length() -> None:
+    options = VadOptions(min_silence_duration_ms=160, max_speech_duration_s=30.0)
+    audio_length_samples = 313120  # not a multiple of MEL_FRAME_SAMPLES
+    segments_list = [
+        SpeechTimestamp(start=0, end=audio_length_samples),
+    ]
+    merged = merge_segments(segments_list, options, audio_length_samples=audio_length_samples)
+    assert len(merged) == 1
+    segment = merged[0]
+    assert segment["end"] == audio_length_samples
+    assert segment["end"] <= audio_length_samples
+    # without audio_length the aligned end may exceed the audio length
+    merged_no_clamp = merge_segments(segments_list, options)
+    assert merged_no_clamp[0]["end"] > audio_length_samples
+
+
 def test_min_speech_duration_ms_default_is_250() -> None:
     assert VadOptions().min_speech_duration_ms == 250
 

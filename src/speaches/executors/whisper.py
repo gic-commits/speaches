@@ -37,6 +37,9 @@ if TYPE_CHECKING:
     from collections.abc import Generator, Iterable
     from pathlib import Path
 
+    import numpy as np
+    from numpy.typing import NDArray
+
     from speaches.config import (
         WhisperConfig,
     )
@@ -125,6 +128,40 @@ class WhisperModelRegistry(ModelRegistry[Model, WhisperModelFiles]):
 
 whisper_model_registry = WhisperModelRegistry(hf_model_filter=hf_model_filter)
 
+LOOP_COMPRESSION_RATIO_THRESHOLD = 2.4
+LOOP_RETRY_REPETITION_PENALTY = 1.3
+
+
+def _segments_contain_loop(segments: list[faster_whisper.transcribe.Segment]) -> bool:
+    return any(segment.compression_ratio > LOOP_COMPRESSION_RATIO_THRESHOLD for segment in segments)
+
+
+def _transcribe_with_loop_retry(
+    whisper_model: BatchedInferencePipeline,
+    audio: NDArray[np.float32],
+    *,
+    repetition_penalty: float = 1.0,
+    **kwargs,
+) -> tuple[list[faster_whisper.transcribe.Segment], faster_whisper.transcribe.TranscriptionInfo]:
+    segments, info = whisper_model.transcribe(
+        audio,
+        repetition_penalty=repetition_penalty,
+        **kwargs,
+    )
+    segments = list(segments)
+    if _segments_contain_loop(segments) and repetition_penalty == 1.0:
+        logger.warning(
+            f"Detected repetitive transcription (compression_ratio > {LOOP_COMPRESSION_RATIO_THRESHOLD}), "
+            f"retrying with repetition_penalty={LOOP_RETRY_REPETITION_PENALTY}"
+        )
+        segments, info = whisper_model.transcribe(
+            audio,
+            repetition_penalty=LOOP_RETRY_REPETITION_PENALTY,
+            **kwargs,
+        )
+        segments = list(segments)
+    return segments, info
+
 
 class WhisperModelManager(BaseModelManager[WhisperModel]):
     def __init__(self, ttl: int, whisper_config: WhisperConfig) -> None:
@@ -158,8 +195,10 @@ class WhisperModelManager(BaseModelManager[WhisperModel]):
             clip_timestamps = merge_segments(
                 request.speech_segments,
                 request.vad_options,
+                audio_length_samples=request.audio.data.shape[0],
             )
-            segments, transcription_info = whisper_model.transcribe(
+            segments, transcription_info = _transcribe_with_loop_retry(
+                whisper_model,
                 request.audio.data,
                 task="transcribe",
                 language=request.language,
@@ -171,8 +210,6 @@ class WhisperModelManager(BaseModelManager[WhisperModel]):
                 hotwords=request.hotwords,
                 without_timestamps=request.without_timestamps,
             )
-
-            segments = list(segments)
 
             res = segments_to_transcription_response(
                 segments,
@@ -198,8 +235,10 @@ class WhisperModelManager(BaseModelManager[WhisperModel]):
             clip_timestamps = merge_segments(
                 request.speech_segments,
                 request.vad_options,
+                audio_length_samples=request.audio.data.shape[0],
             )
-            segments, _transcription_info = whisper_model.transcribe(
+            segments, _transcription_info = _transcribe_with_loop_retry(
+                whisper_model,
                 request.audio.data,
                 task="transcribe",
                 language=request.language,
@@ -316,14 +355,8 @@ def segments_to_transcription_response(
                 language=resp["language"],
                 duration=resp["duration"],
                 text=resp["text"],
-                segments=[
-                    openai.types.audio.TranscriptionSegment(**s)
-                    for s in resp["segments"]
-                ],
-                words=[
-                    openai.types.audio.TranscriptionWord(**w)
-                    for w in resp["words"]
-                ]
+                segments=[openai.types.audio.TranscriptionSegment(**s) for s in resp["segments"]],
+                words=[openai.types.audio.TranscriptionWord(**w) for w in resp["words"]]
                 if resp["words"] is not None
                 else None,
             )

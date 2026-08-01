@@ -322,7 +322,10 @@ MEL_FRAME_SAMPLES = 320  # 20ms at 16kHz, matches whisper time_precision (hop_le
 
 
 def merge_segments(
-    segments_list: list[SpeechTimestamp], vad_options: VadOptions, sampling_rate: int = SAMPLE_RATE
+    segments_list: list[SpeechTimestamp],
+    vad_options: VadOptions,
+    sampling_rate: int = SAMPLE_RATE,
+    audio_length_samples: int | None = None,
 ) -> list[MergedSegment]:
     if not segments_list:
         return []
@@ -370,6 +373,8 @@ def merge_segments(
     for segment in merged_segments:
         segment["start"] = segment["start"] - (segment["start"] % MEL_FRAME_SAMPLES)
         segment["end"] = segment["end"] + (-segment["end"] % MEL_FRAME_SAMPLES)
+        if audio_length_samples is not None:
+            segment["end"] = min(segment["end"], audio_length_samples)
     return merged_segments
 
 
