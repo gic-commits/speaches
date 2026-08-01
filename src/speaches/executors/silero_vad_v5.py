@@ -59,7 +59,7 @@ class VadOptions(BaseModel):
 
     threshold: float = 0.5
     neg_threshold: float | None = None
-    min_speech_duration_ms: int = 0
+    min_speech_duration_ms: int = 250
     max_speech_duration_s: float = float("inf")
     min_silence_duration_ms: int = 2000
     speech_pad_ms: int = 400
@@ -318,6 +318,9 @@ class MergedSegment(TypedDict):
     segments: list[tuple[int, int]]
 
 
+MEL_FRAME_SAMPLES = 320  # 20ms at 16kHz, matches whisper time_precision (hop_length * input_stride)
+
+
 def merge_segments(
     segments_list: list[SpeechTimestamp], vad_options: VadOptions, sampling_rate: int = SAMPLE_RATE
 ) -> list[MergedSegment]:
@@ -362,6 +365,11 @@ def merge_segments(
             "segments": seg_idxs,
         }
     )
+    # Align clip boundaries to whisper time_precision so that clip starts/ends do
+    # not fall in the middle of a mel frame, which can cause dropped segments.
+    for segment in merged_segments:
+        segment["start"] = segment["start"] - (segment["start"] % MEL_FRAME_SAMPLES)
+        segment["end"] = segment["end"] + (-segment["end"] % MEL_FRAME_SAMPLES)
     return merged_segments
 
 
