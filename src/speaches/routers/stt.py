@@ -138,7 +138,7 @@ def transcribe_file(
     stream: Annotated[bool, Form()] = False,
     # non standard parameters
     hotwords: Annotated[str | None, Form()] = None,
-    without_timestamps: Annotated[bool, Form()] = True,
+    without_timestamps: Annotated[bool, Form()] = False,
     # non-standard: CJK post-processing (jieba segmentation + acoustic verification)
     cjk_post_process: Annotated[bool, Form()] = False,
 ) -> Response | StreamingResponse:
@@ -181,5 +181,7 @@ def transcribe_file(
     except Exception:
         logger.exception(f"Response construction failed for response_format={response_format}")
         raise
-    logger.debug(f"Returning transcription response: type={type(http_res).__name__}, media_type={getattr(http_res, 'media_type', 'N/A')}")
+    logger.debug(
+        f"Returning transcription response: type={type(http_res).__name__}, media_type={getattr(http_res, 'media_type', 'N/A')}"
+    )
     return http_res

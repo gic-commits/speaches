@@ -67,7 +67,7 @@ class TranscriptionRequest(BaseModel):
     timestamp_granularities: TimestampGranularities
     speech_segments: list[SpeechTimestamp]
     vad_options: VadOptions
-    without_timestamps: bool = True
+    without_timestamps: bool = False
     cjk_post_process: bool = False
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
