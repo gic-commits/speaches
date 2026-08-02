@@ -21,7 +21,7 @@ from speaches.executors.shared.handler_protocol import (  # noqa: TC001
     TranslationRequest,
     TranslationResponse,
 )
-from speaches.executors.silero_vad_v5 import merge_segments
+from speaches.executors.silero_vad_v5 import MergedSegment, merge_segments
 from speaches.hf_utils import (
     HfModelFilter,
     extract_language_list,
@@ -136,6 +136,24 @@ def _segments_contain_loop(segments: list[faster_whisper.transcribe.Segment]) ->
     return any(segment.compression_ratio > LOOP_COMPRESSION_RATIO_THRESHOLD for segment in segments)
 
 
+WHISPER_CHUNK_SAMPLES = 30 * 16000  # whisper encoder window is 30s at 16kHz
+
+
+def _split_long_clips(clip_timestamps: list[MergedSegment]) -> list[MergedSegment]:
+    """Split clips longer than the 30s whisper encoder window, which would otherwise be
+    truncated by faster-whisper's `pad_or_trim`, dropping the tail of each over-long clip."""
+    split: list[MergedSegment] = []
+    for clip in clip_timestamps:
+        start = clip["start"]
+        while clip["end"] - start > WHISPER_CHUNK_SAMPLES:
+            end = min(start + WHISPER_CHUNK_SAMPLES, clip["end"])
+            split.append({"start": start, "end": end, "segments": clip["segments"]})
+            start = end
+        if start < clip["end"]:
+            split.append({"start": start, "end": clip["end"], "segments": clip["segments"]})
+    return split
+
+
 def _transcribe_with_loop_retry(
     whisper_model: BatchedInferencePipeline,
     audio: NDArray[np.float32],
@@ -199,7 +217,8 @@ class WhisperModelManager(BaseModelManager[WhisperModel]):
             )
             if not clip_timestamps:
                 logger.warning("VAD produced no speech segments, falling back to transcribing the full audio")
-                clip_timestamps = [{"start": 0, "end": request.audio.data.shape[0]}]
+                clip_timestamps = [{"start": 0, "end": request.audio.data.shape[0], "segments": []}]
+            clip_timestamps = _split_long_clips(clip_timestamps)
             segments, transcription_info = _transcribe_with_loop_retry(
                 whisper_model,
                 request.audio.data,
@@ -242,7 +261,8 @@ class WhisperModelManager(BaseModelManager[WhisperModel]):
             )
             if not clip_timestamps:
                 logger.warning("VAD produced no speech segments, falling back to transcribing the full audio")
-                clip_timestamps = [{"start": 0, "end": request.audio.data.shape[0]}]
+                clip_timestamps = [{"start": 0, "end": request.audio.data.shape[0], "segments": []}]
+            clip_timestamps = _split_long_clips(clip_timestamps)
             segments, _transcription_info = _transcribe_with_loop_retry(
                 whisper_model,
                 request.audio.data,
