@@ -72,6 +72,49 @@ def test_merge_segments_clamps_end_to_audio_length() -> None:
     assert merged_no_clamp[0]["end"] > audio_length_samples
 
 
+def test_merge_segments_merges_overlapping_clips() -> None:
+    options = VadOptions(min_silence_duration_ms=160, max_speech_duration_s=30.0)
+    audio_length_samples = 529600
+    # Adjacent segments where frame alignment pushes the first clip's end past the
+    # second clip's start. Overlapping clips crash faster-whisper, so they must be
+    # merged into a single contiguous clip.
+    segments_list = [
+        SpeechTimestamp(start=0, end=13568),
+        SpeechTimestamp(start=13568, end=82176),
+        SpeechTimestamp(start=87296, end=123904),
+        SpeechTimestamp(start=123904, end=160512),
+        SpeechTimestamp(start=160512, end=193536),
+        SpeechTimestamp(start=193536, end=252416),
+        SpeechTimestamp(start=252416, end=299008),
+        SpeechTimestamp(start=299008, end=339200),
+        SpeechTimestamp(start=339200, end=354816),
+        SpeechTimestamp(start=354816, end=393472),
+        SpeechTimestamp(start=393984, end=409600),
+        SpeechTimestamp(start=409600, end=441344),
+        SpeechTimestamp(start=441344, end=480512),
+        SpeechTimestamp(start=480512, end=529600),
+    ]
+    merged = merge_segments(segments_list, options, audio_length_samples=audio_length_samples)
+    assert len(merged) == 1
+    assert merged[0]["end"] <= audio_length_samples
+    # total clip span must not exceed the audio length
+    total_span = sum(segment["end"] - segment["start"] for segment in merged)
+    assert total_span <= audio_length_samples
+
+
+def test_merge_segments_keeps_non_overlapping_clips_separate() -> None:
+    options = VadOptions(min_silence_duration_ms=160, max_speech_duration_s=30.0)
+    # Two segments far apart with a large gap should stay separate.
+    segments_list = [
+        SpeechTimestamp(start=0, end=10000),
+        SpeechTimestamp(start=50000, end=60000),
+    ]
+    merged = merge_segments(segments_list, options, audio_length_samples=70000)
+    assert len(merged) >= 1
+    for i in range(len(merged) - 1):
+        assert merged[i]["end"] <= merged[i + 1]["start"]
+
+
 def test_min_speech_duration_ms_default_is_250() -> None:
     assert VadOptions().min_speech_duration_ms == 250
 

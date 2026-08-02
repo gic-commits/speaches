@@ -348,7 +348,11 @@ def merge_segments(
             if seg.end > segments_list[idx + 1].start:
                 seg.end -= edge_padding
 
-        if seg.end - curr_start > chunk_length and curr_end - curr_start > 0:
+        # Split into a new clip only when the segment does not overlap the current
+        # clip. Overlapping segments (from speech padding or forced max-duration
+        # cuts) would otherwise produce overlapping clips whose summed duration
+        # exceeds the audio length, crashing faster-whisper.
+        if seg.end - curr_start > chunk_length and curr_end - curr_start > 0 and seg.start >= curr_end:
             merged_segments.append(
                 {
                     "start": curr_start,
@@ -375,7 +379,18 @@ def merge_segments(
         segment["end"] = segment["end"] + (-segment["end"] % MEL_FRAME_SAMPLES)
         if audio_length_samples is not None:
             segment["end"] = min(segment["end"], audio_length_samples)
-    return merged_segments
+    # Merge overlapping clips. Frame alignment can push a clip's end past the next
+    # clip's start (from speech padding or forced max-duration cuts). Overlapping
+    # clips would make faster-whisper's `duration_after_vad` exceed the audio
+    # duration and crash, so combine them into one contiguous clip.
+    merged_non_overlapping: list[MergedSegment] = []
+    for segment in merged_segments:
+        if merged_non_overlapping and segment["start"] < merged_non_overlapping[-1]["end"]:
+            merged_non_overlapping[-1]["end"] = max(merged_non_overlapping[-1]["end"], segment["end"])
+            merged_non_overlapping[-1]["segments"].extend(segment["segments"])
+        else:
+            merged_non_overlapping.append(segment)
+    return merged_non_overlapping
 
 
 # NOTE: below code was copied over from `faster_whisper.vad` but is not used anywhere. Kept for reference.
