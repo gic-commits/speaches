@@ -197,6 +197,9 @@ class WhisperModelManager(BaseModelManager[WhisperModel]):
                 request.vad_options,
                 audio_length_samples=request.audio.data.shape[0],
             )
+            if not clip_timestamps:
+                logger.warning("VAD produced no speech segments, falling back to transcribing the full audio")
+                clip_timestamps = [{"start": 0, "end": request.audio.data.shape[0]}]
             segments, transcription_info = _transcribe_with_loop_retry(
                 whisper_model,
                 request.audio.data,
@@ -237,6 +240,9 @@ class WhisperModelManager(BaseModelManager[WhisperModel]):
                 request.vad_options,
                 audio_length_samples=request.audio.data.shape[0],
             )
+            if not clip_timestamps:
+                logger.warning("VAD produced no speech segments, falling back to transcribing the full audio")
+                clip_timestamps = [{"start": 0, "end": request.audio.data.shape[0]}]
             segments, _transcription_info = _transcribe_with_loop_retry(
                 whisper_model,
                 request.audio.data,
